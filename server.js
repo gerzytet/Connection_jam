@@ -2,6 +2,7 @@ var express = require('express')
 
 var app = express()
 var server = app.listen(3000)
+var projectiles = [];
 
 app.use(express.static('public'))
 
@@ -12,14 +13,15 @@ var io = socket(server)
 var players = []
 io.sockets.on('connection', newConnection)
 
-function Player(id, x, y) {
-    this.id = id
-    this.x = x
-    this.y = y
-    this.size = 20
-    this.num = null
+class Player {
+    constructor(id, x, y) {
+        this.id = id
+        this.x = x
+        this.y = y
+        this.size = 20
+        this.num = null
+    }
 }
-
 
 setInterval(heartbeat, 33);
 
