@@ -34,7 +34,10 @@ setInterval(heartbeat, 33);
 const timeoutMillis = 10000;
 
 function heartbeat() {
-    io.sockets.emit('heartbeat', players);
+    io.sockets.emit('heartbeat', {
+        players: players,
+        projectiles: projectiles
+    });
     var toRemove = [];
     for (var i = 0; i < players.length; i++) {
         //if now - players.lastPing > timeoutMillis
@@ -61,6 +64,7 @@ function newConnection(socket) {
     socket.on('start', Start)
     socket.on('move', Move)
     socket.on('heartbeatReply', heartbeatReply)
+    socket.on('shoot', shoot)
 
     function Start(data) {
         //console.log(socket.id + ' ' + data.x + ' ' + data.y);
@@ -103,6 +107,22 @@ function newConnection(socket) {
             console.log("error " + socket.id + ' ' + players);
         }
         players[d].lastPing = Date.now();
+    }
+
+    function shoot(data) {
+        var d = getIndex(socket.id);
+        if (d === undefined) {
+            console.log("Warning: player not found in shoot function");
+            return;
+        }
+        var projectile = {
+            pos: {
+                x: players[d].x,
+                y: players[d].y
+            },
+            owner: socket.id
+        };
+        projectiles.push(projectile);
     }
 }
 

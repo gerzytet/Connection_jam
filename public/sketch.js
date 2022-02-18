@@ -7,6 +7,7 @@
 
 var socket
 var players = []
+var projectiles = []
 var player
 
 /*
@@ -22,12 +23,19 @@ lastPing: Date  the last time the player has replied to the server
 /*
 XY object:
 
-x: int       the x position
-y: int       the y position
+x: Number       the x position
+y: Number       the y position
 */
 
 //the players array consists of a list of Player objects, as above
 //the players array has identical contents as the server-side players array
+
+/*
+Projectile object:
+pos:    p5 vector on client side, XY object on server side
+vel:    p5 vector on client side, XY object on server side.  measured in pixels per second
+owner:  socket id of the player who fired the projectile
+*/
 
 /*
 types of packets:
@@ -39,7 +47,10 @@ C -> S: a packet that gets sent from the client to server size
 
 heartbeat:
 S -> C
-data: the player array from the server.
+data: {
+	player: player array from server
+	projectiles: projectiles array from server
+}
 effect: The client sets its player array to the recieved player array when it recieves
 this packet is sent by the server every 33 milliseconds.
 
@@ -57,6 +68,11 @@ heartbeatReply:
 C -> S
 data: empty object
 effect: the server will know that the client is still connected when it recieves this packet
+
+shoot:
+C -> S
+data: empty object
+effect: the server will create a new projectile at the player's position when it recieves this packet
 */
 
 var mapWidth = 3000;
@@ -98,7 +114,17 @@ function setup() {
 
 	socket.emit('start', data);
 	socket.on('heartbeat', function (data) {
-		players = data;
+		players = data['players'];
+		projectiles = data['projectiles'];
+		
+		//convert XY objects into p5 vectors
+		for (var i = 0; i < projectiles.length; i++) {
+			var p = projectiles[i];
+			var pos = p.pos;
+			p.pos = createVector(pos.x, pos.y);
+			var vel = p.vel;
+			p.vel = createVector(vel.x, vel.y);
+		}
 		socket.emit('heartbeatReply', {});
 	})
 }
@@ -204,6 +230,12 @@ function draw() {
 			text(players[i].num + 1, players[i].x - camera.x, players[i].y - camera.y + (players[i].size / 3));
 		}
 	}
+	//render projectiles
+	for (var i = projectiles.length - 1; i >= 0; i--) {
+		var p = projectiles[i];
+		fill(255, 102, 25);
+		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, 10, 10);
+	}
 
 	var data = {
 		x: player.pos.x,
@@ -231,8 +263,10 @@ function keyReleased() {
 		//player.pos.x += 10;
 		console.log("RIGHT_ARROW PRESSED");
 	}
-	//o key code to disconnect
-	else if (key === 'o') {
-		socket.disconnect()
+}
+
+function keyTyped() {
+	if (keyCode === 32) {
+		socket.emit('shoot', {})
 	}
 }
