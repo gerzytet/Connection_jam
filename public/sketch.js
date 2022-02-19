@@ -149,16 +149,13 @@ function setup() {
 
 		socket.emit('heartbeatReply', {});
 	})
-
-	/*
-	let frames = spritedata.frames;
+    /*let frames = spritedata.frames;
 	for (let i = 0; i < frames.length; i++) {
 	    let pos = frames[i].position;
 	    let img = spritesheet.get(pos.x, pos.y, pos.w, pos.h);
 	    animation.push(img);
 	}
 	sprite = new Sprite(animation, 50, 50, 1);
-
 	*/
 }
 
@@ -329,8 +326,8 @@ function draw() {
 	};
 
 	socket.emit('move', data)
-	//sprite.show();
-	//sprite.animate();
+    /*sprite.show();
+	sprite.animate();*/
 }
 
 function keyReleased() {
