@@ -9,7 +9,7 @@ var express = require('express')
 
 var app = express()
 var server = app.listen(3000)
-var projectiles = [];
+var newProjectiles = [];
 
 app.use(express.static('public'))
 
@@ -30,14 +30,11 @@ class Player {
     }
 }
 
-setInterval(heartbeat, 33);
+var tickTime = 33
+setInterval(heartbeat, tickTime);
 const timeoutMillis = 10000;
 
 function heartbeat() {
-    io.sockets.emit('heartbeat', {
-        players: players,
-        projectiles: projectiles
-    });
     var toRemove = [];
     for (var i = 0; i < players.length; i++) {
         //if now - players.lastPing > timeoutMillis
@@ -56,6 +53,11 @@ function heartbeat() {
         }
     }
     players = newPlayers;
+    io.sockets.emit('heartbeat', {
+        players: players,
+        newProjectiles: newProjectiles
+    });
+    newProjectiles = [];
 }
 
 openspace = false;
@@ -94,6 +96,7 @@ function newConnection(socket) {
         //console.log(d + ' ' + data.x + ' ' + data.y);
         players[d].x = data.x;
         players[d].y = data.y;
+        players[d].angle = data.angle;
     }
 
     function heartbeatReply(data) {
@@ -115,14 +118,25 @@ function newConnection(socket) {
             console.log("Warning: player not found in shoot function");
             return;
         }
+        var angle = players[d].angle;
+        function toRadians(deg) {
+            return deg * (Math.PI / 180);
+        }
+        var xvel = Math.cos(toRadians(angle)) * 10;
+        var yvel = -Math.sin(toRadians(angle)) * 10;
+
         var projectile = {
             pos: {
                 x: players[d].x,
                 y: players[d].y
             },
-            owner: socket.id
+            vel: {
+                x: xvel,
+                y: yvel
+            },
+            owner: players[d].num
         };
-        projectiles.push(projectile);
+        newProjectiles.push(projectile);
     }
 }
 

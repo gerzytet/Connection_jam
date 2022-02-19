@@ -13,11 +13,14 @@ var player
 /*
 Player object:
 
-pos: p5 vector  (x, y) position
+pos: p5 vector  (x, y) position.  Only exists on client side
+x: Number       x position.  Only exists on server side
+y: Number       y position.  Only exists on server side
 id: String      the socket id
 num: int        the player number
 size: int       the player size (basically a test value)
 lastPing: Date  the last time the player has replied to the server
+angle: Number   the angle of the player's sprite
 */
 
 /*
@@ -34,7 +37,7 @@ y: Number       the y position
 Projectile object:
 pos:    p5 vector on client side, XY object on server side
 vel:    p5 vector on client side, XY object on server side.  measured in pixels per second
-owner:  socket id of the player who fired the projectile
+owner:  num of the player who fired the projectile
 */
 
 /*
@@ -49,7 +52,7 @@ heartbeat:
 S -> C
 data: {
 	player: player array from server
-	projectiles: projectiles array from server
+	newProjectiles: projectiles array from server
 }
 effect: The client sets its player array to the recieved player array when it recieves
 this packet is sent by the server every 33 milliseconds.
@@ -78,13 +81,22 @@ effect: the server will create a new projectile at the player's position when it
 var mapWidth = 3000;
 var mapHeight = 2000;
 
+/*let spritesheet;
+let spritedata;
+let animation = [];
+let sprite;
+function preload() {
+    //spritedata = loadJSON('TestHorse/horse.json');
+    //spritesheet = loadImage('TestHorse/spritesheet.png');
+}*/
+
 var cnv;
 var camera;
 
 function centerCanvas() {
 	x = width / 2;
 	y = height / 2;
-	background(0, 0, 0);
+	//(0);
 }
 
 function windowResized() {
@@ -102,7 +114,7 @@ function setup() {
 	background(51);
 	socket = io.connect('http://localhost:3000');
 
-	player = new Player(random(width), random(height));
+	player = new HealthEntity(random(width), random(height),50,5,5);
 	var data = {
 		x: player.pos.x,
 		y: player.pos.y
@@ -115,23 +127,44 @@ function setup() {
 	socket.emit('start', data);
 	socket.on('heartbeat', function (data) {
 		players = data['players'];
-		projectiles = data['projectiles'];
+		newProjectiles = data['newProjectiles'];
 		
 		//convert XY objects into p5 vectors
-		for (var i = 0; i < projectiles.length; i++) {
-			var p = projectiles[i];
+		for (var i = 0; i < newProjectiles.length; i++) {
+			var p = newProjectiles[i];
 			var pos = p.pos;
-			p.pos = createVector(pos.x, pos.y);
+			pos = createVector(pos.x, pos.y);
 			var vel = p.vel;
-			p.vel = createVector(vel.x, vel.y);
+			vel = createVector(vel.x, vel.y);
+			newProjectiles[i] = new Entity(pos.x, pos.y, 1);
+			newProjectiles[i].vel = vel;
+			newProjectiles[i].size = 10;
+			newProjectiles[i].owner = p.owner;
 		}
+
+		//add all new projectiles to the projectiles array
+		for (var i = 0; i < newProjectiles.length; i++) {
+			projectiles.push(newProjectiles[i]);
+		}
+
 		socket.emit('heartbeatReply', {});
 	})
+
+	/*
+	let frames = spritedata.frames;
+	for (let i = 0; i < frames.length; i++) {
+	    let pos = frames[i].position;
+	    let img = spritesheet.get(pos.x, pos.y, pos.w, pos.h);
+	    animation.push(img);
+	}
+	sprite = new Sprite(animation, 50, 50, 1);
+
+	*/
 }
 
 function draw() {
 	background(51)
-	console.log("camera: " + camera.x + " " +  camera.y);
+	//console.log("camera: " + camera.x + " " +  camera.y);
 
 	
 	//the closest distance a player can get to edge of the screen without the camera attempting to move
@@ -182,10 +215,6 @@ function draw() {
 	
 	camera.x = newCameraX;
 	camera.y = newCameraY;
-	/*if (camera.x != oldcamera.x || camera.y != oldcamera.y) {
-		console.log("camera: " + camera.x + " " +  camera.y);
-	}*/
-	//log camera
 
 	function code(c) {
 		return c.charCodeAt()
@@ -195,78 +224,141 @@ function draw() {
 	if (keyIsDown(UP_ARROW) || keyIsDown(code('w')) || keyIsDown(code('W'))) {
 		player.vel.y = -1;
 		//player.pos.y -= 10;
-		console.log("UP_ARROW PRESSED");
+		//console.log("UP_ARROW PRESSED");
 	}
 	if (keyIsDown(DOWN_ARROW) || keyIsDown(code('s')) || keyIsDown(code('S'))) {
 		player.vel.y = 1;
 		//player.pos.y += 10;
-		console.log("DOWN_ARROW PRESSED");
+		//console.log("DOWN_ARROW PRESSED");
 	}
 	if (keyIsDown(LEFT_ARROW) || keyIsDown(code('a')) || keyIsDown(code('A'))) {
 		player.vel.x = -1;
 		//player.pos.x -= 10;
-		console.log("LEFT_ARROW PRESSED");
+		//console.log("LEFT_ARROW PRESSED");
 	}
 	if (keyIsDown(RIGHT_ARROW) || keyIsDown(code('d')) || keyIsDown(code('D'))) {
 		player.vel.x = 1;
 		//player.pos.x += 10;
-		console.log("RIGHT_ARROW PRESSED");
+		//console.log("RIGHT_ARROW PRESSED");
 	}
+
+	for (var i = 0; i < projectiles.length; i++) {
+		projectiles[i].smoothMove();
+		
+		if (projectiles[i].pos.x > mapWidth || projectiles[i].pos.x < 0 || projectiles[i].pos.y > mapHeight || projectiles[i].pos.y < 0) {
+			projectiles.splice(i, 1);
+			i--;
+		}
+    }
+
+	var newAngle = Math.atan2(mouseY - (player.pos.y - camera.y), mouseX - (player.pos.x - camera.x));
+	
+	newAngle *= (180 / Math.PI);
+	newAngle = -newAngle;
+	if (newAngle < 0) {
+		newAngle += 360;
+	}
+	if (!isNaN(newAngle)) {
+		player.angle = newAngle;
+	}
+	//console.log("new angle: ",  newAngle)
+
 
 	player.smoothMove();
 	for (var i = players.length - 1; i >= 0; i--) {
 		var id = players[i].id;
-		if (id.substring(2, id.length) !== socket.id) {
-			if (players[i].num === 0) { fill(255, 0, 0) }
-			else if (players[i].num === 1) { fill(0, 0, 255) }
-			else if (players[i].num === 2) { fill(0, 255, 0) }
-			else if (players[i].num === 3) { fill(255, 255, 0) }
-			else { fill(255, 102, 25) }
-			ellipse(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2, players[i].size * 2);
-
-			fill(255);
-			textAlign(CENTER);
-			textSize(15);
-			text(players[i].num + 1, players[i].x - camera.x, players[i].y - camera.y + (players[i].size / 3));
+		var isMyself = players[i].num === player.num
+		//numbers:
+		console.log("me: " + socket.id + " player: " + players[i].id);
+		if (isMyself) {
+			console.log("myself: ", myself.num)
 		}
+
+		if (players[i].num === 0) { fill(255, 0, 0) }
+		else if (players[i].num === 1) { fill(0, 0, 255) }
+		else if (players[i].num === 2) { fill(0, 255, 0) }
+		else if (players[i].num === 3) { fill(255, 255, 0) }
+		else { fill(255, 102, 25) }
+		/*push()
+		translate(players[i].x - camera.x, players[i].y - camera.y)
+		rotate(players[i].angle);
+		ellipse(0, 0, players[i].size * 1, players[i].size * 3);
+		pop()*/
+
+		push()
+		fill(255, 255, 255)
+		circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
+		pop()
+
+		push();
+		angleMode(DEGREES)
+		translate(players[i].x - camera.x, players[i].y - camera.y);
+		rotate(-players[i].angle + 90);
+		beginShape();
+		vertex(0, -players[i].size * 2);
+		vertex(-players[i].size, players[i].size * 2);
+		vertex(0, -players[i].size + players[i].size * 2);
+		vertex(players[i].size, players[i].size * 2);
+		endShape(CLOSE);
+		pop();
+
+		//draw rectangle with players[i].x, and players[i].y + 3
+		
+		//max health bar (black)
+		rect(players[i].x- camera.x -20, players[i].y  - camera.y + 25, player.maxHealth, 10);
+		fill('red');
+		//current health bar (red)
+		rect(players[i].x - camera.x -20, players[i].y - camera.y + 25, player.health, 10);
+		
+		fill(255);
+		textAlign(CENTER);
+		textSize(15);
+		text(players[i].num + 1, players[i].x - camera.x, players[i].y - camera.y + (players[i].size / 3));
 	}
 	//render projectiles
 	for (var i = projectiles.length - 1; i >= 0; i--) {
 		var p = projectiles[i];
 		fill(255, 102, 25);
-		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, 10, 10);
+		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 	}
 
 	var data = {
 		x: player.pos.x,
-		y: player.pos.y
+		y: player.pos.y,
+		angle: player.angle
 	};
 
 	socket.emit('move', data)
+	//sprite.show();
+	//sprite.animate();
 }
 
 function keyReleased() {
 	if (keyCode === UP_ARROW || key === 'w' || key === 'W') {
 		player.vel.y = 0;
 		//player.pos.y -= 10;
-		console.log("UP_ARROW PRESSED");
+		//console.log("UP_ARROW PRESSED");
 	} else if (keyCode === DOWN_ARROW || key === 's' || key === 'S') {
 		player.vel.y = 0;
 		//player.pos.y += 10;
-		console.log("DOWN_ARROW PRESSED");
+		//console.log("DOWN_ARROW PRESSED");
 	} else if (keyCode === LEFT_ARROW || key === 'a' || key === 'A') {
 		player.vel.x = 0;
 		//player.pos.x -= 10;
-		console.log("LEFT_ARROW PRESSED");
+		//console.log("LEFT_ARROW PRESSED");
 	} else if (keyCode === RIGHT_ARROW || key === 'd' || key === 'D') {
 		player.vel.x = 0;
 		//player.pos.x += 10;
-		console.log("RIGHT_ARROW PRESSED");
+		//console.log("RIGHT_ARROW PRESSED");
 	}
 }
 
 function keyTyped() {
 	if (keyCode === 32) {
 		socket.emit('shoot', {})
+	}
+	if (key === 'q') {
+		player.angle += 5;
+		console.log(angle)
 	}
 }
