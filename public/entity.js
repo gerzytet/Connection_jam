@@ -29,13 +29,14 @@ class Entity {
 
 class HealthEntity extends Entity {
 
-	constructor(x, y, health, attack, speed){
+	constructor(x, y, health, attack, speed, num){
 		super(x,y);
 		this.maxHealth = health;
 		this.health = health;
 		this.attack = 1;
 		this.speed = speed;
 		this.angle = 0;
+		this.num = num;
 	}
 
 	

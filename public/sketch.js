@@ -114,7 +114,7 @@ function setup() {
 	background(51);
 	socket = io.connect('http://localhost:3000');
 
-	player = new HealthEntity(random(width), random(height),50,5,5);
+	player = new HealthEntity(random(width), random(height),50,5,5, null);
 	var data = {
 		x: player.pos.x,
 		y: player.pos.y
@@ -160,6 +160,15 @@ function setup() {
 }
 
 function draw() {
+	if (player.num === null) {
+		for (var i = 0; i < players.length; i++) {
+			if (socket.id === players[i].id) {
+				player.num = players[i].num;
+			}
+		}
+		console.log("Found me! " + player.num);
+	}
+
 	background(51)
 	//console.log("camera: " + camera.x + " " +  camera.y);
 
@@ -260,17 +269,32 @@ function draw() {
 	}
 	//console.log("new angle: ",  newAngle)
 
+	if (players.num !== null) {
+		//do collision
+		for (var i = 0; i < players.length; i++) {
+			for (var j = 0; j < projectiles.length; j++) {
+				var player = players[i];
+				var projectile = projectiles[j];
+				if (projectile.owner === player.num) {
+					continue;
+				}
+				//get our position and projectile position
+				var playerPos = player.pos;
+				var projectilePos = projectile.pos;
+				var dist = Math.sqrt(Math.pow(playerPos.x - projectilePos.x, 2) + Math.pow(playerPos.y - projectilePos.y, 2));
+				var collisionDist = player.size + projectile.size;
+				if (dist < collisionDist) {
+					projectiles.splice(j, 1);
+					player.health /= 2;
+					j--;
+				}
+		    }
+		}
+	}
+
 
 	player.smoothMove();
 	for (var i = players.length - 1; i >= 0; i--) {
-		var id = players[i].id;
-		var isMyself = players[i].num === player.num
-		//numbers:
-		console.log("me: " + socket.id + " player: " + players[i].id);
-		if (isMyself) {
-			console.log("myself: ", myself.num)
-		}
-
 		if (players[i].num === 0) { fill(255, 0, 0) }
 		else if (players[i].num === 1) { fill(0, 0, 255) }
 		else if (players[i].num === 2) { fill(0, 255, 0) }
