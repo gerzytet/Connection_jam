@@ -37,7 +37,6 @@ class Entity {
 	smoothMove() {
 		this.vel.x += this.acc.x;
 		this.vel.y += this.acc.y;
-		console.log("new max speed: " + this.maxSpeed);
 		this.vel.limit(this.maxSpeed);
 		this.pos.x += this.vel.x;
 		this.pos.y += this.vel.y;
@@ -56,6 +55,20 @@ class Entity {
 
 	}
 
+}
+
+class Sword extends Entity {
+	constructor(x, y, angle, size, attack, duration, teamColor) {
+		super(x, y, 0, attack, size, teamColor)
+		this.angle = angle
+		this.duration = duration
+		this.startTime = millis()
+		this.used = false;
+	}
+
+	isExpired() {
+		return millis() - this.startTime > this.duration;
+	}
 }
 
 class HealthEntity extends Entity {
@@ -79,19 +92,6 @@ class HealthEntity extends Entity {
 		bullet.vel.x = this.attackSpeed * cos(this.angle);
 		bullet.vel.y = this.attackSpeed * sin(this.angle);
 		return bullet;
-	}
-
-	MeleeAttack() {
-		var sword = new Entity(this.pos.x, this.pos.y - 5, 0, 5);
-		sword.show();
-		//make this 0.2 seconds
-		var lifetime = 100;
-
-		/*
-		if (sword.isCollided(other)) {
-			other.health -= this.attack;
-		}
-		*/
 	}
 }
 

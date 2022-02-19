@@ -64,7 +64,7 @@ class Player {
         this.name = name;
         this.health = 50;
         this.attack = 5;
-    }
+    };
 }
 
 var tickTime = 33
@@ -129,6 +129,7 @@ function newConnection(socket) {
     socket.on('changeHealth', changeHealth)
     socket.on('changeName', changeName)
     socket.on('collectPowerup', collectPowerup)
+    socket.on('meeleAttack', meeleAttack)
     function Start(data) {
         //console.log(socket.id + ' ' + data.x + ' ' + data.y);
         var c = (255)
@@ -217,6 +218,7 @@ function newConnection(socket) {
             console.log("Warning: new team not found in change health function");
             return;
         }
+        console.log(newTeam, players[d].health);
 
         if(players[d].health <= 0){
             console.log("dead " + d);
@@ -250,6 +252,47 @@ function newConnection(socket) {
     }
 
     socket.emit('allPowerups', powerups);
+
+    function hitPlayers(data) {
+        var ids = data['ids'];
+        var attackerD = getIndex(socket.id);
+
+        for (var i = 0; i < ids.length; i++) {
+            var d = getIndex(ids[i]);
+            if (d === undefined) {
+                console.log("Warning: player not found in hit players function");
+                return;
+            }
+            players[d].health -= data['damage'];
+            if (players[d].health <= 0) {
+                switchTeam(players[d], players[attackerD].teamColor);
+            }
+        }
+    }
+
+    function meeleAttack(data) {
+        var d = getIndex(socket.id);
+        if (d === undefined) {
+            console.log("Warning: player not found in meele attack function");
+            return;
+        }
+        var p = players[d]
+        var swordWidth = p.size * 4;
+        var swordHeight = p.size * 4;
+	    var x = p.x + Math.cos(p.angle * Math.PI / 180) * (swordWidth / 2 + p.size * 2);
+	    var y = p.y - Math.sin(p.angle * Math.PI / 180) * (swordWidth / 2 + p.size * 2);
+	    //swordEntity = new Sword(x, y, player.angle, swordWidth, swordHeight, 1000);
+        var swordEntity = {
+            x: x,
+            y: y,
+            angle: p.angle,
+            attack: 10,
+            size: p.size * 4,
+            duration: 1000,
+            teamColor: p.teamColor
+        }
+        io.sockets.emit('meeleAttack', swordEntity);
+    }
 }
 
 function getPowerupIndex(id) {

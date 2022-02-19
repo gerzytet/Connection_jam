@@ -11,7 +11,7 @@ var projectiles = []
 var player
 var powerups = []
 var activeEffects = []
-var powerupSound
+var sounds = ["blaster.mp3", "powerup.mp3"]
 
 function getPowerupIndex(id) {
     for (var i = 0; i < powerups.length; i++) {
@@ -21,16 +21,24 @@ function getPowerupIndex(id) {
     }
 }
 
+//IMPLEMENT SOUNDS!!!!!
+/*
 function preload(){
-	//soundFormats('mp3');
-	//powerupSound = loadSound("library/powerup.mp3");
+	soundFormats('mp3');
+	powerupSound = loadSound('library/powerup.mp3');
+	blasterSound = loadSound('library/blaster.mp3');
 }
-
 
 function playPowerupSound() {
 	powerupSound.play();
-	console.log("the sound has played");
+	console.log("powerup sound");
 }
+
+function playBlasterSound() {
+	blasterSound.play();
+	console.log("blaster sound")
+}
+*/
 
 /*
 Player object:
@@ -101,7 +109,10 @@ effect: the server will create a new projectile at the player's position when it
 
 changeHealth:
 C -> S
-data: the new health value
+data: {
+	Number health: the new health value
+	Color newTeam: the team color of the attacker
+}
 effect: the server will change the player's health when it recieves this packet
 
 newPowerup:
@@ -124,24 +135,24 @@ S -> C
 data: the id of the powerup (unique id)
 effect (server): the server will remove this powerup, update the server-size player value, then relay this packet to all clients
 effect (client): the client will remove this powerup from its list
+
+meeleAttack:
+C -> S
+S -> C
+data: empty object from client to server, then sword object from server to client
+effect (server): the server will create a new meele attack at the player's position when it recieves this packet
+effect (client): the client will add this meele attack to its list
 */
 
 //if you change these, also change them in server.js
 const mapWidth = 3000;
 const mapHeight = 2000;
 
-/*let spritesheet;
-let spritedata;
-let animation = [];
-let sprite;
-function preload() {
-    //spritedata = loadJSON('TestHorse/horse.json');
-    //spritesheet = loadImage('TestHorse/spritesheet.png');
-}*/
-
 var cnv;
 var camera;
 let input, button;
+let img;
+//var PlayerShipImage = new Image();
 
 function centerCanvas() {
 	x = width / 2;
@@ -171,8 +182,18 @@ function setup() {
 
 	textAlign(CENTER);
 	textSize(50);
+	
 	socket = io.connect('http://localhost:3000');
 
+	img = loadImage('Sprites/Player_Ship_2.png', () => {}, () => {
+		console.log('failed to load image');
+	});
+
+	//creates sound objects for each source
+	for (var i = 0; i < sounds.length; i++){
+		sounds[i] = new SoundEntity(sounds[i]);
+	}
+	
 	player = new HealthEntity(random(width), random(height),50,5,5, null);
 	var data = {
 		x: player.pos.x,
@@ -207,6 +228,10 @@ function setup() {
 		for (var i = 0; i < newProjectiles.length; i++) {
 			projectiles.push(newProjectiles[i]);
 		}
+		var ctx = canvas.getContext("2d");
+		var img = document.getElementById("player");
+		//console.log(img);
+		//ctx.drawImage(img, 10, 10, 100, 100);
 
 		socket.emit('heartbeatReply', {});
 	})
@@ -232,6 +257,18 @@ function setup() {
 			return;
 		}
 		powerups.splice(p_i, 1)
+	})
+
+	socket.on('meeleAttack', function (data) {
+		swords.push(new Sword(
+			data.x,
+			data.y,
+			data.angle,
+			data.size,
+			data.attack,
+			data.duration,
+			data.teamColor
+		))
 	})
     /*let frames = spritedata.frames;
 	for (let i = 0; i < frames.length; i++) {
@@ -260,6 +297,16 @@ function changeName() {
 	}
 
 }
+
+function rotate_and_draw_image(img_x, img_y, img_width, img_height, img_angle){
+	imageMode(CENTER);
+	translate(img_x+img_width/2, img_y+img_width/2);
+	rotate(PI/180*img_angle);
+	image(img, 0, 0, img_width, img_height);
+	rotate(-PI / 180 * img_angle);
+	translate(-(img_x+img_width/2), -(img_y+img_width/2));
+	imageMode(CORNER);
+  }
 
 function draw() {
 
@@ -352,11 +399,6 @@ function draw() {
 		//player.pos.x += 10;
 		//console.log("RIGHT_ARROW PRESSED");
 	}
-	if (keyIsDown(code('q')) || keyIsDown(code('Q'))){
-		player.MeleeAttack();
-		console.log(sword.pos.x);
-		//draw rectangle for 0.2 seconds, and fill with red
-	}
 
 	//const firerate for # shots per seconds
 	//countdown
@@ -401,6 +443,9 @@ function draw() {
 			var data = {
 				newTeam: projectiles[j].teamColor,
 				health: player.health
+			}
+			if (player.health <= 0) {
+				player.teamColor = projectiles[j].teamColor;
 			}
 			projectiles.splice(j, 1);
 			j--;
@@ -453,7 +498,34 @@ function draw() {
 			}
 			powerups.splice(i, 1);
 			i--;
-			playPowerupSound()
+			sounds[1].sound.play();
+		}
+	}
+
+	//collision for swords
+	for (var i = 0; i < swords.length; i++) {
+		if (swords[i].isExpired()) {
+			swords.splice(i, 1);
+			i--;
+			continue;
+		}
+		if (colorsEqual(player.teamColor, swords[i].teamColor) || swords[i].used) {
+			continue;
+		}
+		var collisionDist = swords[i].size + players[i].size;
+		var distance = Math.sqrt(Math.pow(swords[i].pos.x - player.pos.x, 2) + Math.pow(swords[i].pos.y - player.pos.y, 2));
+		var isCollided = distance < collisionDist;
+		if(isCollided) {
+			console.log("collided with sword");
+			player.health -= swords[i].attack;
+			swords[i].used = true;
+			socket.emit('changeHealth',{
+				newTeam: swords[i].teamColor,
+				health: player.health
+			});
+			if (player.health <= 0) {
+				player.teamColor = swords[i].teamColor;
+			}
 		}
 	}
     
@@ -461,29 +533,34 @@ function draw() {
 	player.vel.y = player.vel.y * 0.8;
 	player.smoothMove();
 	for (var i = players.length - 1; i >= 0; i--) {
-		/*push()
-		translate(players[i].x - camera.x, players[i].y - camera.y)
-		rotate(players[i].angle);
-		ellipse(0, 0, players[i].size * 1, players[i].size * 3);
-		pop()*/
+		push()
+		fill(255, 255, 255)
+		circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
+		push();
+		fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
+		angleMode(DEGREES)
+		translate(players[i].x - camera.x, players[i].y - camera.y);
+		rotate(-players[i].angle + 90);
+		beginShape();
+		vertex(0, -players[i].size * 2);
+		vertex(-players[i].size, players[i].size * 2);
+		vertex(0, -players[i].size + players[i].size * 2);
+		vertex(players[i].size, players[i].size * 2);
+		endShape(CLOSE);
+		pop();
 
-			push()
-			fill(255, 255, 255)
-			circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
-			pop()
-			push();
-			fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
-			angleMode(DEGREES)
-			translate(players[i].x - camera.x, players[i].y - camera.y);
-			rotate(-players[i].angle + 90);
-			beginShape();
-			vertex(0, -players[i].size * 2);
-			vertex(-players[i].size, players[i].size * 2);
-			vertex(0, -players[i].size + players[i].size * 2);
-			vertex(players[i].size, players[i].size * 2);
-			endShape(CLOSE);
-			pop();
-	
+		image(img, 0, 0)
+		fill(255, 255, 255)
+		circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
+		push();
+		tint(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
+		angleMode(DEGREES)
+		translate(players[i].x - camera.x, players[i].y - camera.y);
+		rotate(-players[i].angle + 90);
+		rotate_and_draw_image(players[i].x, players[i].y, players[i].size * 3, players[i].size * 3, players[i].angle);
+		tint(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
+		image(img, 0, 0, players[i].size, players[i].size);
+		pop();
 
 		//draw rectangle with players[i].x, and players[i].y + 3
 		
@@ -513,6 +590,24 @@ function draw() {
 		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 	}
 
+	
+
+	//render swords
+	for (var i = 0; i < swords.length; i++) {
+		var sword = swords[i];
+		if (sword.isExpired()) {
+			sword = undefined;
+		} else {
+			push()
+			rectMode(CENTER)
+			fill(sword.teamColor.r, sword.teamColor.g, sword.teamColor.b);
+			translate(sword.pos.x - camera.x, sword.pos.y - camera.y)
+			rotate(-sword.angle);
+			rect(0, 0, sword.size, sword.size);
+			pop()
+		}
+	}
+
 	var data = {
 		x: player.pos.x,
 		y: player.pos.y,
@@ -524,13 +619,23 @@ function draw() {
 	sprite.animate();*/
 }
 
-/*
-	if key is K or k
-	draw rectangle(sword.x, sword.y, width, height);
-	call MeleeAttack()
-	call isCollision()
+var swords = []
+//in milliseconds
+const swordCooldown = 1000;
+var lastSwordTime = -10000;
 
-*/
+function isSwordReady() {
+	console.log(millis() - lastSwordTime, swordCooldown)
+	return (millis() - lastSwordTime) > swordCooldown;
+}
+
+function meeleAttack() {
+	if (!isSwordReady()) {
+		return;
+	}
+	lastSwordTime = millis();
+	socket.emit('meeleAttack', {})
+}
 
 function keyReleased() {
 	if (keyCode === UP_ARROW || key === 'w' || key === 'W') {
@@ -551,9 +656,14 @@ function keyReleased() {
 function keyTyped(){
 	if (keyCode === 32) {
 		socket.emit('shoot', {})
+		sounds[0].sound.play();
+	}
+	if (keyCode === 107 || keyCode === 75) {
+		meeleAttack()
 	}
 }
 
 function mouseClicked(){
 	socket.emit('shoot', {})
+	sounds[0].sound.play();
 }

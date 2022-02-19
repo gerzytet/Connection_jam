@@ -8,19 +8,30 @@
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/addons/p5.sound.min.js"></script>
     <script type="text/javascript" src="sketch.js"></script>
     <script type="text/javascript" src="entity.js"></script>
+    <script type="text/javascript" src="sprite.js"></script>
+    <script type="text/javascript" src="sound.js"></script>
+    <audio controls class="no-bar">
+        <source src="blaster.mp3" type="audio/mpeg">
+        <source src="powerup.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
 
     <style>
         body {
             padding: 20px;
         }
+        .no-bar{
+            display: none;
+        }
     </style>
     
     <div id="sketch-container">
-
 
     </div>
 
 </head>
 <body>
+
+    <img id="player" src="Sprites/Player_Ship_2.png" style="display:none;"> </img>
 </body>
 </html>
