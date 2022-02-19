@@ -273,20 +273,22 @@ function draw() {
 		//do collision
 		for (var i = 0; i < players.length; i++) {
 			for (var j = 0; j < projectiles.length; j++) {
-				var player = players[i];
+				var player_ = players[i];
 				var projectile = projectiles[j];
-				if (projectile.owner === player.num) {
+				if (projectile.owner === player_.num) {
 					continue;
 				}
 				//get our position and projectile position
-				var playerPos = player.pos;
 				var projectilePos = projectile.pos;
-				var dist = Math.sqrt(Math.pow(playerPos.x - projectilePos.x, 2) + Math.pow(playerPos.y - projectilePos.y, 2));
-				var collisionDist = player.size + projectile.size;
+				var dist = Math.sqrt(Math.pow(player_.x - projectilePos.x, 2) + Math.pow(player_.y - projectilePos.y, 2));
+				var collisionDist = player_.size + projectile.size;
 				if (dist < collisionDist) {
 					projectiles.splice(j, 1);
-					player.health /= 2;
 					j--;
+					if (player.num === player_.num) {
+						console.log(player.num);
+						player.health /= 2;
+					}
 				}
 		    }
 		}
