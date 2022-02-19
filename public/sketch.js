@@ -78,6 +78,15 @@ effect: the server will create a new projectile at the player's position when it
 var mapWidth = 3000;
 var mapHeight = 2000;
 
+/*let spritesheet;
+let spritedata;
+let animation = [];
+let sprite;
+function preload() {
+    spritedata = loadJSON('sprite.json');
+    spritesheet = loadImage('sprite.png');
+}*/
+
 var cnv;
 var camera;
 
@@ -127,6 +136,13 @@ function setup() {
 		}
 		socket.emit('heartbeatReply', {});
 	})
+    /*let frames = spritedata.frames;
+	for (let i = 0; i < frames.length; i++) {
+	    let pos = frames[i].position;
+	    let img = spritesheet.get(pos.x, pos.y, pos.w, pos.h);
+	    animation.push(img);
+	}
+	sprite = new Sprite(animation, x, y, speed);*/
 }
 
 function draw() {
@@ -243,6 +259,8 @@ function draw() {
 	};
 
 	socket.emit('move', data)
+    /*sprite.show();
+	sprite.animate();*/
 }
 
 function keyReleased() {
