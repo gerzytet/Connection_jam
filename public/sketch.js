@@ -9,6 +9,7 @@ var socket
 var players = []
 var projectiles = []
 var player
+var powerups = []
 
 /*
 Player object:
@@ -76,10 +77,30 @@ shoot:
 C -> S
 data: empty object
 effect: the server will create a new projectile at the player's position when it recieves this packet
+
+changeHealth:
+C -> S
+data: the new health value
+effect: the server will change the player's health when it recieves this packet
+
+newPowerup:
+S -> C
+data: a powerup object, containing: {
+	int type: the type of powerup
+	XY pos: the position of the powerup
+	int id: the id of the powerup
+}
+effect: the client will add this powerup to its list
+
+allPowerups:
+S -> C
+data: an array of powerup objects
+effect: the client will add all powerups to its list
 */
 
-var mapWidth = 3000;
-var mapHeight = 2000;
+//if you change these, also change them in server.js
+const mapWidth = 3000;
+const mapHeight = 2000;
 
 /*let spritesheet;
 let spritedata;
@@ -92,6 +113,7 @@ function preload() {
 
 var cnv;
 var camera;
+let input, button;
 
 function centerCanvas() {
 	x = width / 2;
@@ -112,12 +134,22 @@ function setup() {
 	x = width / 2;
 	y = height / 2;
 	background(51);
+	input = createInput();
+	input.position(0, 0);
+
+	button = createButton('Change Name');
+	button.position(input.x + input.width, 0);
+	button.mousePressed(changeName);
+
+	textAlign(CENTER);
+	textSize(50);
 	socket = io.connect('http://localhost:3000');
 
 	player = new HealthEntity(random(width), random(height),50,5,5, null);
 	var data = {
 		x: player.pos.x,
-		y: player.pos.y
+		y: player.pos.y,
+		name: "SpaceShip"
 	};
 	camera = {
 		x: 0,
@@ -129,17 +161,18 @@ function setup() {
 		players = data['players'];
 		newProjectiles = data['newProjectiles'];
 		
-		//convert XY objects into p5 vectors
+		//convert list of projectiles into entities
 		for (var i = 0; i < newProjectiles.length; i++) {
 			var p = newProjectiles[i];
 			var pos = p.pos;
 			pos = createVector(pos.x, pos.y);
 			var vel = p.vel;
 			vel = createVector(vel.x, vel.y);
-			newProjectiles[i] = new Entity(pos.x, pos.y, 1);
+			newProjectiles[i] = new Entity(pos.x, pos.y, vel.mag());
 			newProjectiles[i].vel = vel;
 			newProjectiles[i].size = 10;
-			newProjectiles[i].owner = p.owner;
+			newProjectiles[i].teamColor = p.teamColor;
+			newProjectiles[i].attack = p.attack;
 		}
 
 		//add all new projectiles to the projectiles array
@@ -148,6 +181,20 @@ function setup() {
 		}
 
 		socket.emit('heartbeatReply', {});
+	})
+
+	function addPowerupFromData(data) {
+		powerups.push(new Powerup(data.pos.x, data.pos.y, data.type, data.id))
+	}
+
+	socket.on('newPowerup', function (data) {
+		addPowerupFromData(data)
+	})
+
+	socket.on('allPowerups', function (data) {
+		for (var i = 0; i < data.length; i++) {
+			addPowerupFromData(data[i])
+		}
 	})
     /*let frames = spritedata.frames;
 	for (let i = 0; i < frames.length; i++) {
@@ -159,14 +206,33 @@ function setup() {
 	*/
 }
 
-function draw() {
-	if (player.num === null) {
-		for (var i = 0; i < players.length; i++) {
+function changeName() {
+	const name = input.value();
+	input.value('');
+	for (var i = 0; i < players.length; i++) {
+		if (socket.id != undefined) {
 			if (socket.id === players[i].id) {
-				player.num = players[i].num;
+				data = {
+					newName: name,
+					i: i
+				}
+				console.log(data)
+				socket.emit('changeName', data);
 			}
 		}
-		console.log("Found me! " + player.num);
+	}
+
+}
+
+function draw() {
+
+	if (player.teamColor === null) {
+		for (var i = 0; i < players.length; i++) {
+			if (socket.id === players[i].id) {
+				player.teamColor = players[i].teamColor;
+			}
+		}
+		console.log("Found me! " + player.teamColor);
 	}
 
 	background(51)
@@ -228,24 +294,28 @@ function draw() {
 
 	//controls basic player movement
 	if (keyIsDown(UP_ARROW) || keyIsDown(code('w')) || keyIsDown(code('W'))) {
-		player.vel.y = -1;
+		player.acc.y = -1;
 		//player.pos.y -= 10;
 		//console.log("UP_ARROW PRESSED");
 	}
 	if (keyIsDown(DOWN_ARROW) || keyIsDown(code('s')) || keyIsDown(code('S'))) {
-		player.vel.y = 1;
+		player.acc.y = 1;
 		//player.pos.y += 10;
 		//console.log("DOWN_ARROW PRESSED");
 	}
 	if (keyIsDown(LEFT_ARROW) || keyIsDown(code('a')) || keyIsDown(code('A'))) {
-		player.vel.x = -1;
+		player.acc.x = -1;
 		//player.pos.x -= 10;
 		//console.log("LEFT_ARROW PRESSED");
 	}
 	if (keyIsDown(RIGHT_ARROW) || keyIsDown(code('d')) || keyIsDown(code('D'))) {
-		player.vel.x = 1;
+		player.acc.x = 1;
 		//player.pos.x += 10;
 		//console.log("RIGHT_ARROW PRESSED");
+	}
+	if (keyIsDown(code('q')) || keyIsDown(code('Q'))){
+		player.MeleeAttack();
+		rect(player.sword.x, player.sword.y, 10, 10);
 	}
 
 	for (var i = 0; i < projectiles.length; i++) {
@@ -269,79 +339,104 @@ function draw() {
 	}
 	//console.log("new angle: ",  newAngle)
 
-	if (players.num !== null) {
-		//do collision
-		for (var i = 0; i < players.length; i++) {
-			for (var j = 0; j < projectiles.length; j++) {
-				var player_ = players[i];
-				var projectile = projectiles[j];
-				if (projectile.owner === player_.num) {
-					continue;
-				}
-				//get our position and projectile position
-				var projectilePos = projectile.pos;
-				var dist = Math.sqrt(Math.pow(player_.x - projectilePos.x, 2) + Math.pow(player_.y - projectilePos.y, 2));
-				var collisionDist = player_.size + projectile.size;
-				if (dist < collisionDist) {
-					projectiles.splice(j, 1);
-					j--;
-					if (player.num === player_.num) {
-						console.log(player.num);
-						player.health /= 2;
-					}
-				}
-		    }
+	function colorsEqual(c1, c2) {
+		return c1.r === c2.r && c1.g === c2.g && c1.b === c2.b;
+	}
+
+	//collision for us
+	for (var j = 0; j < projectiles.length; j++) {
+		if(colorsEqual(projectiles[j].teamColor, player.teamColor)) {
+			continue;
+		}else if( player.isCollided(projectiles[j]) && player.health > 0) {
+			console.log(player.teamColor);
+			console.log(projectiles[j].teamColor);
+			player.health -= projectiles[j].attack;
+
+			var data = {
+				newTeam: projectiles[j].teamColor,
+				health: player.health
+			}
+			projectiles.splice(j, 1);
+			j--;
+			socket.emit('changeHealth', data);
 		}
 	}
 
+	//collision for others
+	for (var i = 0; i < players.length; i++) {
+		//if players[i] is us, skip
+		if (players[i].id === socket.id || players[i].health <= 0) {
+			continue;
+		}
+		//we just delete balls when we detect collision
+		for (var j = 0; j < projectiles.length; j++) {
+			if(colorsEqual(projectiles[j].teamColor, players[i].teamColor)) {
+				continue;
+			}
+			//log size and pos of both
+			var collisionDist = projectiles[j].size + players[i].size;
+			var distance = Math.sqrt(Math.pow(projectiles[j].pos.x - players[i].x, 2) + Math.pow(projectiles[j].pos.y - players[i].y, 2));
+			var isCollided = distance < collisionDist;
+			if(isCollided) {
+				projectiles.splice(j, 1);
+				j--;
+			}
+		}
+	}
 
+	player.vel.x = player.vel.x * 0.8;
+	player.vel.y = player.vel.y * 0.8;
 	player.smoothMove();
 	for (var i = players.length - 1; i >= 0; i--) {
-		if (players[i].num === 0) { fill(255, 0, 0) }
-		else if (players[i].num === 1) { fill(0, 0, 255) }
-		else if (players[i].num === 2) { fill(0, 255, 0) }
-		else if (players[i].num === 3) { fill(255, 255, 0) }
-		else { fill(255, 102, 25) }
 		/*push()
 		translate(players[i].x - camera.x, players[i].y - camera.y)
 		rotate(players[i].angle);
 		ellipse(0, 0, players[i].size * 1, players[i].size * 3);
 		pop()*/
 
-		push()
-		fill(255, 255, 255)
-		circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
-		pop()
-
-		push();
-		angleMode(DEGREES)
-		translate(players[i].x - camera.x, players[i].y - camera.y);
-		rotate(-players[i].angle + 90);
-		beginShape();
-		vertex(0, -players[i].size * 2);
-		vertex(-players[i].size, players[i].size * 2);
-		vertex(0, -players[i].size + players[i].size * 2);
-		vertex(players[i].size, players[i].size * 2);
-		endShape(CLOSE);
-		pop();
+			push()
+			fill(255, 255, 255)
+			circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
+			pop()
+			push();
+			fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
+			angleMode(DEGREES)
+			translate(players[i].x - camera.x, players[i].y - camera.y);
+			rotate(-players[i].angle + 90);
+			beginShape();
+			vertex(0, -players[i].size * 2);
+			vertex(-players[i].size, players[i].size * 2);
+			vertex(0, -players[i].size + players[i].size * 2);
+			vertex(players[i].size, players[i].size * 2);
+			endShape(CLOSE);
+			pop();
+	
 
 		//draw rectangle with players[i].x, and players[i].y + 3
 		
 		//max health bar (black)
 		rect(players[i].x- camera.x -20, players[i].y  - camera.y + 25, player.maxHealth, 10);
-		fill('red');
+		fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
 		//current health bar (red)
-		rect(players[i].x - camera.x -20, players[i].y - camera.y + 25, player.health, 10);
+		
+		rect(players[i].x - camera.x -20, players[i].y - camera.y + 25, players[i].health, 10);
 		
 		fill(255);
 		textAlign(CENTER);
-		textSize(15);
-		text(players[i].num + 1, players[i].x - camera.x, players[i].y - camera.y + (players[i].size / 3));
+		textSize((players[i].name.length + 15) / 3);
+		text(players[i].name, players[i].x - camera.x, players[i].y - camera.y + (players[i].size + 20));
 	}
 	//render projectiles
 	for (var i = projectiles.length - 1; i >= 0; i--) {
 		var p = projectiles[i];
-		fill(255, 102, 25);
+		fill(p.teamColor.r, p.teamColor.g, p.teamColor.b);
+		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+	}
+
+	//render powerups
+	for (var i = powerups.length - 1; i >= 0; i--) {
+		var p = powerups[i];
+		fill(p.teamColor.r, p.teamColor.g, p.teamColor.b);
 		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 	}
 
@@ -356,32 +451,36 @@ function draw() {
 	sprite.animate();*/
 }
 
+/*
+	if key is K or k
+	draw rectangle(sword.x, sword.y, width, height);
+	call MeleeAttack()
+	call isCollision()
+
+*/
+
 function keyReleased() {
 	if (keyCode === UP_ARROW || key === 'w' || key === 'W') {
-		player.vel.y = 0;
-		//player.pos.y -= 10;
-		//console.log("UP_ARROW PRESSED");
+		player.acc.y = 0;
+		player.vel.y = player.vel.y / 2;
 	} else if (keyCode === DOWN_ARROW || key === 's' || key === 'S') {
-		player.vel.y = 0;
-		//player.pos.y += 10;
-		//console.log("DOWN_ARROW PRESSED");
+		player.acc.y = 0;
+		player.vel.y = player.vel.y / 2;
 	} else if (keyCode === LEFT_ARROW || key === 'a' || key === 'A') {
-		player.vel.x = 0;
-		//player.pos.x -= 10;
-		//console.log("LEFT_ARROW PRESSED");
+		player.acc.x = 0;
+		player.vel.x = player.vel.x / 2;
 	} else if (keyCode === RIGHT_ARROW || key === 'd' || key === 'D') {
-		player.vel.x = 0;
-		//player.pos.x += 10;
-		//console.log("RIGHT_ARROW PRESSED");
+		player.acc.x = 0;
+		player.vel.x = player.vel.x / 2;
 	}
 }
 
-function keyTyped() {
+function keyTyped(){
 	if (keyCode === 32) {
 		socket.emit('shoot', {})
 	}
-	if (key === 'q') {
-		player.angle += 5;
-		console.log(angle)
-	}
+}
+
+function mouseClicked(){
+	socket.emit('shoot', {})
 }

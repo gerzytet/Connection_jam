@@ -11,28 +11,76 @@ var app = express()
 var server = app.listen(3000)
 var newProjectiles = [];
 
+const mapWidth = 3000;
+const mapHeight = 2000;
+
+//just to hold powerup types
+class Powerup {
+    static HEAL = 0;
+    static SPEED = 1;
+}
+function randomPowerupType() {
+    return Math.floor(Math.random() * 2);
+}
+
 app.use(express.static('public'))
 
 console.log('My server is running')
 
+class Color {
+    constructor(r, g, b) {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+    }
+
+}
+
 var socket = require('socket.io')
 var io = socket(server)
 var players = []
+var colors = [(255)];
 io.sockets.on('connection', newConnection)
 
+
+
 class Player {
-    constructor(id, x, y) {
+    constructor(id,name, x, y, c) {
         this.id = id
         this.x = x
         this.y = y
         this.size = 20
-        this.num = null
+        this.teamColor = new Color(c.r, c.g, c.b);
+        this.name = name;
+        this.health = 50;
+        this.attack = 5;
     }
 }
 
 var tickTime = 33
 setInterval(heartbeat, tickTime);
 const timeoutMillis = 10000;
+
+var powerups = []
+var nextPowerupId = 0;
+const powerupChancePerSecond = 0.1;
+const powerupLimit = 25;
+
+function doNewPowerups() {
+    if (Math.random() < powerupChancePerSecond && powerups.length < powerupLimit) {
+        var powerup = {
+            pos: {
+                //random between 0 and mapWidth
+                x: Math.random() * mapWidth,
+                y: Math.random() * mapHeight
+            },
+            type: randomPowerupType(),
+            id: nextPowerupId++
+        }
+        io.sockets.emit('newPowerup', powerup);
+        powerups.push(powerup);
+    }
+}
 
 function heartbeat() {
     var toRemove = [];
@@ -58,8 +106,9 @@ function heartbeat() {
         newProjectiles: newProjectiles
     });
     newProjectiles = [];
+    doNewPowerups();
 }
-
+teams = [];
 openspace = false;
 function newConnection(socket) {
     console.log('New connection: ' + socket.id)
@@ -67,23 +116,17 @@ function newConnection(socket) {
     socket.on('move', Move)
     socket.on('heartbeatReply', heartbeatReply)
     socket.on('shoot', shoot)
-
+    socket.on('changeHealth', changeHealth)
+    socket.on('changeName', changeName)
     function Start(data) {
         //console.log(socket.id + ' ' + data.x + ' ' + data.y);
-        var player = new Player(socket.id, data.x, data.y);
-        if (openspace) {
-            for (i = 0; i < players.length; i++) {
-                if (players[i] == 0) {
-                    player.num = i;
-                    players[i] = player;
-                }
-            }
+        var c = (255)
+        while (colors.includes(c)) {
+            c = new Color(Math.floor(Math.random() * 255) + 1, Math.floor(Math.random() * 255) + 1, Math.floor(Math.random() * 255) + 1)
         }
-        else {
-            player.num = players.length;
-            players.push(player);
-            
-        }
+        var player = new Player(socket.id,data.name, data.x, data.y, c);
+        players.push(player);
+        colors.push(c);
     }
 
     function Move(data) {
@@ -134,10 +177,50 @@ function newConnection(socket) {
                 x: xvel,
                 y: yvel
             },
-            owner: players[d].num
+            teamColor: players[d].teamColor,
+            attack: players[d].attack
         };
         newProjectiles.push(projectile);
     }
+
+    //player and enemy are player objects
+    function switchTeam(player,enemy){
+        console.log(enemy, players)
+        player.teamColor = enemy;
+        player.health=50;
+        //randomize x and y
+        player.x = Math.floor(Math.random() * 20) + 1;
+        player.y = Math.floor(Math.random() * 20) + 1;
+        console.log(players);
+    }
+
+    function changeHealth(data) {
+        var d = getIndex(socket.id);
+        if (d === undefined) {
+            console.log("Warning: player not found in change health function");
+            return;
+        }
+        players[d].health = data['health'];
+        var newTeam = data['newTeam'];
+        if (newTeam === undefined) {
+            console.log("Warning: new team not found in change health function");
+            return;
+        }
+
+        if(players[d].health <= 0){
+            console.log("dead " + d);
+            switchTeam(players[d], data['newTeam']);
+
+        }
+    }
+
+    function changeName(data) {
+        console.log(data.newName)
+        players[data.i].name = data.newName;
+        console.log(players[data.i].name)
+    }
+
+    socket.emit('allPowerups', powerups);
 }
 
 function getIndex(id) {
