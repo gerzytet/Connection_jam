@@ -1,6 +1,6 @@
 /*
 @file server.js
-@author entire team
+@author Entire team
 @date 2/18/2022
 @brief File that sets up server
 */
@@ -18,6 +18,16 @@ const mapHeight = 2000;
 class Powerup {
     static HEAL = 0;
     static SPEED = 1;
+}
+function applyPowerup(player, type) {
+    switch (type) {
+        case Powerup.HEAL:
+            player.health = 50;
+            break;
+        case Powerup.SPEED:
+            //no server side changes necessary
+            break;
+    }
 }
 function randomPowerupType() {
     return Math.floor(Math.random() * 2);
@@ -118,6 +128,7 @@ function newConnection(socket) {
     socket.on('shoot', shoot)
     socket.on('changeHealth', changeHealth)
     socket.on('changeName', changeName)
+    socket.on('collectPowerup', collectPowerup)
     function Start(data) {
         //console.log(socket.id + ' ' + data.x + ' ' + data.y);
         var c = (255)
@@ -220,7 +231,33 @@ function newConnection(socket) {
         console.log(players[data.i].name)
     }
 
+    function collectPowerup(data) {
+        var d = getIndex(socket.id);
+        if (d === undefined) {
+            console.log("Warning: player not found in collect powerup function");
+            return;
+        }
+        var p = getPowerupIndex(data);
+        if (p === undefined) {
+            console.log("Warning: powerup not found in collect powerup function");
+            return;
+        }
+        applyPowerup(players[d], powerups[p].type);
+
+        powerups.splice(p, 1);
+
+        io.sockets.emit('collectPowerup', data);
+    }
+
     socket.emit('allPowerups', powerups);
+}
+
+function getPowerupIndex(id) {
+    for (var i = 0; i < powerups.length; i++) {
+        if (powerups[i].id === id) {
+            return i;
+        }
+    }
 }
 
 function getIndex(id) {

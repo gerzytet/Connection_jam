@@ -4,6 +4,7 @@
 @date 2/18/2022
 @brief File that controls basic player functions
 */
+
 class Color {
 	constructor(r, g, b) {
 		this.r = r;
@@ -36,6 +37,7 @@ class Entity {
 	smoothMove() {
 		this.vel.x += this.acc.x;
 		this.vel.y += this.acc.y;
+		console.log("new max speed: " + this.maxSpeed);
 		this.vel.limit(this.maxSpeed);
 		this.pos.x += this.vel.x;
 		this.pos.y += this.vel.y;
@@ -45,7 +47,7 @@ class Entity {
 
 	isCollided(other) {
 		let distance = dist(this.pos.x, this.pos.y, other.pos.x, other.pos.y);
-		console.log("distance : " + distance + "from " + other);
+		//console.log("distance : " + distance + "from " + other);
 		return distance < this.size + other.size;
 	}
 
@@ -119,13 +121,49 @@ class Powerup extends Entity {
 
 	//show is the same as parent
 
-	applyPowerup(player) {
+	apply(player) {
 		switch (this.type) {
 			case Powerup.HEAL:
 				player.health = player.maxHealth;
 				break;
 			case Powerup.SPEED:
-				player.speed *= 2;
+				player.maxSpeed *= 2;
+				break;
+		}
+	}
+
+	hasActiveEffect() {
+		return this.type == Powerup.SPEED;
+	}
+
+	getActiveEffect() {
+		if (!this.hasActiveEffect()) {
+			return;
+		}
+		if (this.type == Powerup.SPEED) {
+			return new ActiveEffect(Powerup.SPEED, 10000);
+		}
+	}
+}
+
+//an active powerup effect
+class ActiveEffect {
+	//started and duration are in milliseconds
+	//type is the type of effect
+	constructor(type, duration) {
+		this.type = type
+		this.duration = duration
+		this.started = millis()
+	}
+
+	isExpired() {
+		return this.started + this.duration < millis();
+	}
+
+	unApply(player) {
+		switch (this.type) {
+			case Powerup.SPEED:
+				player.maxSpeed /= 2;
 				break;
 		}
 	}

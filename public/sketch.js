@@ -10,6 +10,27 @@ var players = []
 var projectiles = []
 var player
 var powerups = []
+var activeEffects = []
+var powerupSound
+
+function getPowerupIndex(id) {
+    for (var i = 0; i < powerups.length; i++) {
+        if (powerups[i].id === id) {
+            return i;
+        }
+    }
+}
+
+function preload(){
+	//soundFormats('mp3');
+	//powerupSound = loadSound("library/powerup.mp3");
+}
+
+
+function playPowerupSound() {
+	powerupSound.play();
+	console.log("the sound has played");
+}
 
 /*
 Player object:
@@ -96,6 +117,13 @@ allPowerups:
 S -> C
 data: an array of powerup objects
 effect: the client will add all powerups to its list
+
+collectPowerup:
+C -> S
+S -> C
+data: the id of the powerup (unique id)
+effect (server): the server will remove this powerup, update the server-size player value, then relay this packet to all clients
+effect (client): the client will remove this powerup from its list
 */
 
 //if you change these, also change them in server.js
@@ -184,6 +212,7 @@ function setup() {
 	})
 
 	function addPowerupFromData(data) {
+		console.log("adding powerup!")
 		powerups.push(new Powerup(data.pos.x, data.pos.y, data.type, data.id))
 	}
 
@@ -195,6 +224,14 @@ function setup() {
 		for (var i = 0; i < data.length; i++) {
 			addPowerupFromData(data[i])
 		}
+	})
+
+	socket.on('collectPowerup', function (data) {
+		var p_i = getPowerupIndex(data)
+		if (p_i === undefined) {
+			return;
+		}
+		powerups.splice(p_i, 1)
 	})
     /*let frames = spritedata.frames;
 	for (let i = 0; i < frames.length; i++) {
@@ -293,30 +330,37 @@ function draw() {
 	}
 
 	//controls basic player movement
+	var accMagnitude = player.maxSpeed / 5;
+
 	if (keyIsDown(UP_ARROW) || keyIsDown(code('w')) || keyIsDown(code('W'))) {
-		player.acc.y = -1;
+		player.acc.y = -accMagnitude;
 		//player.pos.y -= 10;
 		//console.log("UP_ARROW PRESSED");
 	}
 	if (keyIsDown(DOWN_ARROW) || keyIsDown(code('s')) || keyIsDown(code('S'))) {
-		player.acc.y = 1;
+		player.acc.y = accMagnitude;
 		//player.pos.y += 10;
 		//console.log("DOWN_ARROW PRESSED");
 	}
 	if (keyIsDown(LEFT_ARROW) || keyIsDown(code('a')) || keyIsDown(code('A'))) {
-		player.acc.x = -1;
+		player.acc.x = -accMagnitude;
 		//player.pos.x -= 10;
 		//console.log("LEFT_ARROW PRESSED");
 	}
 	if (keyIsDown(RIGHT_ARROW) || keyIsDown(code('d')) || keyIsDown(code('D'))) {
-		player.acc.x = 1;
+		player.acc.x = accMagnitude;
 		//player.pos.x += 10;
 		//console.log("RIGHT_ARROW PRESSED");
 	}
 	if (keyIsDown(code('q')) || keyIsDown(code('Q'))){
 		player.MeleeAttack();
-		rect(player.sword.x, player.sword.y, 10, 10);
+		console.log(sword.pos.x);
+		//draw rectangle for 0.2 seconds, and fill with red
 	}
+
+	//const firerate for # shots per seconds
+	//countdown
+	//boolean shot that deteriorates timer
 
 	for (var i = 0; i < projectiles.length; i++) {
 		projectiles[i].smoothMove();
@@ -326,6 +370,8 @@ function draw() {
 			i--;
 		}
     }
+
+//
 
 	var newAngle = Math.atan2(mouseY - (player.pos.y - camera.y), mouseX - (player.pos.x - camera.x));
 	
@@ -383,7 +429,34 @@ function draw() {
 			}
 		}
 	}
-
+	
+	//check for active effect expiration
+	for (var i = 0; i < activeEffects.length; i++) {
+		var effect = activeEffects[i];
+		if (effect.isExpired()) {
+			effect.unApply(player)
+			activeEffects.splice(i, 1);
+			i--;
+		}
+	}
+	
+	//collision for powerups
+	for (var i = 0; i < powerups.length; i++) {
+		//console.log(powerups[i].pos.x, powerups[i].pos.y, player.pos.x, player.pos.y);
+		if (player.isCollided(powerups[i])) {
+			//console.log("collided with powerup");
+			socket.emit('collectPowerup', powerups[i].id);
+			powerups[i].apply(player);
+			if (powerups[i].hasActiveEffect()) {
+				var effect = powerups[i].getActiveEffect();
+				activeEffects.push(effect);
+			}
+			powerups.splice(i, 1);
+			i--;
+			playPowerupSound()
+		}
+	}
+    
 	player.vel.x = player.vel.x * 0.8;
 	player.vel.y = player.vel.y * 0.8;
 	player.smoothMove();
