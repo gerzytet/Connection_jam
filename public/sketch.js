@@ -174,6 +174,11 @@ var input, button;
 var img;
 var bg;
 var pship;
+var eship;
+var asteroid_full;
+var asteroid_medium;
+var asteroid_low;
+var bullet;
 //var PlayerShipImage = new Image();
 
 var isGameOver
@@ -195,6 +200,21 @@ function preload() {
 	});
 	pship = loadImage('Sprites/Player_Ship_2.png', () => {}, () => {
 		console.log("failed to load player ship");
+	});
+	eship = loadImage('Sprites/Ship_1.png', () => {}, () => {
+		console.log("failed to load enemy ship");
+	});
+	asteroid_full = loadImage('Sprites/Asteroid_Full.png', () => {}, () => {
+		console.log("failed to load asteroid full");
+	});
+	asteroid_medium = loadImage('Sprites/Asteroid_Medium.png', () => {}, () => {
+		console.log("failed to load asteroid medium");
+	});
+	asteroid_low = loadImage('Sprites/Asteroid_Low.png', () => {}, () => {
+		console.log("failed to load asteroid low");
+	});
+	bullet = loadImage('Sprites/Bullet.png', () => {}, () => {
+		console.log("failed to load bullet");
 	});
 }
 
@@ -904,8 +924,10 @@ function draw() {
 	//render projectiles
 	for (var i = projectiles.length - 1; i >= 0; i--) {
 		var p = projectiles[i];
-		fill(p.teamColor.r, p.teamColor.g, p.teamColor.b);
-		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+		tint(p.teamColor.r, p.teamColor.g, p.teamColor.b);
+		//ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+		image(bullet, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		
 	}
 
 	//render powerups
@@ -944,7 +966,16 @@ function draw() {
 	for (var i = asteroids.length - 1; i >= 0; i--) {
 		var p = asteroids[i];
 		fill(107, 88, 83);
-		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size * 2, p.size * 2);
+		if(asteroids[i].health > 7){
+			image(asteroid_full, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		}
+		else if(asteroids[i].health <= 7 && asteroids[i].health > 3){
+			image(asteroid_medium, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		}
+		else if(asteroids[i].health <= 3 && asteroids[i].health > 0){
+			image(asteroid_low, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		}
+		//ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size * 2, p.size * 2);
 	}	
 
 	//render enemies
@@ -955,12 +986,13 @@ function draw() {
 		angleMode(DEGREES)
 		translate(enemies[i].pos.x - camera.x, enemies[i].pos.y - camera.y);
 		rotate(-enemies[i].angle + 90);
-		beginShape();
+		/*beginShape();
 		vertex(0, -enemies[i].size * 2);
 		vertex(-enemies[i].size, enemies[i].size * 2);
 		vertex(0, -enemies[i].size + enemies[i].size * 2);
 		vertex(enemies[i].size, enemies[i].size * 2);
-		endShape(CLOSE);
+		endShape(CLOSE);*/
+		image(eship, 0, 0, enemies[i].size * 3.5, enemies[i].size * 3.5);
 		pop();
 	}
 

@@ -40,7 +40,6 @@ const tickTime = 3
 const timeoutMillis = 10000
 
 
-console.log("Server started 1");
 //just to hold powerup types
 class Powerup {
     static HEAL = 0;
