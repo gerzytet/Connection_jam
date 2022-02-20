@@ -195,25 +195,25 @@ function windowResized() {
 }
 
 function preload() {
-	bg = loadImage('Sprites/Sprite_Background.png', () => {}, () => {
+	bg = loadImage('Sprite_Background.png', () => {}, () => {
 		console.log("failed to load background");
 	});
-	pship = loadImage('Sprites/Player_Ship_2.png', () => {}, () => {
+	pship = loadImage('Player_Ship_2.png', () => {}, () => {
 		console.log("failed to load player ship");
 	});
-	eship = loadImage('Sprites/Ship_1.png', () => {}, () => {
+	eship = loadImage('Ship_1.png', () => {}, () => {
 		console.log("failed to load enemy ship");
 	});
-	asteroid_full = loadImage('Sprites/Asteroid_Full.png', () => {}, () => {
+	asteroid_full = loadImage('Asteroid_Full.png', () => {}, () => {
 		console.log("failed to load asteroid full");
 	});
-	asteroid_medium = loadImage('Sprites/Asteroid_Medium.png', () => {}, () => {
+	asteroid_medium = loadImage('Asteroid_Medium.png', () => {}, () => {
 		console.log("failed to load asteroid medium");
 	});
-	asteroid_low = loadImage('Sprites/Asteroid_Low.png', () => {}, () => {
+	asteroid_low = loadImage('Asteroid_Low.png', () => {}, () => {
 		console.log("failed to load asteroid low");
 	});
-	bullet = loadImage('Sprites/Bullet.png', () => {}, () => {
+	bullet = loadImage('Bullet.png', () => {}, () => {
 		console.log("failed to load bullet");
 	});
 }
@@ -593,7 +593,7 @@ function draw() {
 				i--;
 				continue;
 			}
-			console.log(projectiles[i].teamColor, player.teamColor);
+			//console.log(projectiles[i].teamColor, player.teamColor);
 			if(colorsEqual(projectiles[i].teamColor, player.teamColor)) {
 				continue;
 			} else if (isPosPosCollision(player, projectiles[i])) {
@@ -921,14 +921,25 @@ function draw() {
 			text(players[i].name, players[i].x - camera.x, players[i].y - camera.y + (players[i].size + 30));
         }
 	}
+
+	/*
+	function shouldRenderXY () {
+
+	}
+	function shouldRender(entity) {
+		return shouldRender(entity.pos.x, entity.pos.y);
+	}*/
+	
+
 	//render projectiles
+	/*
 	for (var i = projectiles.length - 1; i >= 0; i--) {
 		var p = projectiles[i];
 		tint(p.teamColor.r, p.teamColor.g, p.teamColor.b);
 		//ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 		image(bullet, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
 		
-	}
+	}*/
 
 	//render powerups
 	for (var i = powerups.length - 1; i >= 0; i--) {

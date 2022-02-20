@@ -5,8 +5,6 @@
 @brief File that handles sound class
 */
 
-//Make array of sounds
-
 class SoundEntity {
     constructor(src){
         this.sound = document.createElement("audio");

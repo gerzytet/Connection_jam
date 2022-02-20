@@ -14,7 +14,6 @@ class Color {
 
 }
 
-
 class Entity {
 
 	constructor(x, y, speed, attack, size = 3, teamColor = new Color(255, 255, 255), image = null) {
