@@ -11,27 +11,56 @@ var app = express()
 var server = app.listen(3000)
 var newProjectiles = [];
 
-const mapWidth = 3000;
-const mapHeight = 2000;
+const enemyMaxSpeed = 0.30
+const asteroidBaseSize = 25
+const asteroidBaseVelocityMagnitude = 25
+const asteroidChancePerTick = 0.01
+const asteroidLimit = 20
+const asteroidVariance = 50
+const attackPowerMult = 2
+const bulletSpeed = 10
+const enemyAttack = 8
+const enemyBaseHealth = 20
+const enemyBulletSpeed = 2.5;
+const enemyChancePerTick = 0.01
+const enemyLimit = 5
+const enemyShootChancePerTick = 0.005
+const enemySize = 20
+const mapHeight = 2000
+const mapWidth = 3000
+const playerAttack = 5
+const playerMaxHealth = 50
+const playerSize = 20
+const powerupChancePerTick = 0.1
+const powerupLimit = 25
+const swordAttack = 10
+const swordDuration = 1000
+const swordSizeMultiplier = 4
+const tickTime = 3
+const timeoutMillis = 10000
 
 //just to hold powerup types
 class Powerup {
     static HEAL = 0;
     static SPEED = 1;
     static ATTACK = 2;
+    static FUEL = 3;
 }
 
 //apply powerup effects to server-side players
 function applyPowerup(player, type) {
     switch (type) {
         case Powerup.HEAL:
-            player.health = 50;
+            player.health = playerMaxHealth;
             break;
         case Powerup.SPEED:
             //no server side changes necessary
             break;
         case Powerup.ATTACK:
-            player.attack *= 2;
+            player.attack *= attackPowerMult;
+            break;
+        case Powerup.FUEL:
+            //no server side changes necessary
             break;
     }
 }
@@ -66,11 +95,11 @@ class Player {
         this.id = id
         this.x = x
         this.y = y
-        this.size = 20
+        this.size = playerSize
         this.teamColor = new Color(c.r, c.g, c.b);
         this.name = name;
-        this.health = 50;
-        this.attack = 5;
+        this.health = playerMaxHealth;
+        this.attack = playerAttack;
     };
 }
 
@@ -82,8 +111,8 @@ class Asteroid {
         //pixels per second
         this.vx = vx;
         this.vy = vy;
-        this.size = 20;
-        this.health = 10;
+        this.size = asteroidBaseSize + Math.random() * asteroidVariance;
+        this.health = this.size;
     };
 }
 
@@ -95,25 +124,42 @@ class Enemy {
         //pixels per second
         this.vx = vx;
         this.vy = vy;
-        this.size = 20;
-        this.health = 20;
-        this.attack = 2.5;
+        this.size = enemySize;
+        this.health = enemyBaseHealth;
+        this.attack = enemyAttack;
+        this.angle = 0
     };
 }
 
-const asteroidChancePerTick = 0.01;
-const asteroidLimit = 20;
+
 var nextAsteroidId = 0;
 //might spawn an asteroid, taking into account the chance of one per tick, and the limit
 function doNewAsteroids() {
     if (Math.random() < asteroidChancePerTick && asteroids.length < asteroidLimit) {
         var x = Math.random() * mapWidth;
         var y = Math.random() * mapHeight;
-        var vx = Math.random() * 50 - 25;
-        var vy = Math.random() * 50 - 25;
+        var vx = Math.random() * asteroidBaseVelocityMagnitude*2 - asteroidBaseVelocityMagnitude;
+        var vy = Math.random() * asteroidBaseVelocityMagnitude*2 - asteroidBaseVelocityMagnitude;
         asteroids.push(
             new Asteroid(nextAsteroidId++, x, y, vx, vy)
         )
+    }
+}
+
+//parameter is asteroid object
+function spawnFuelFromAsteroidBreak(asteroid) {
+    var numFuel = Math.floor((asteroid.size + 12) / 25);
+    for (var i = 0; i < numFuel; i++) {
+        var fuel = {
+            pos: {
+                x: asteroid.x + Math.random() * asteroid.size - asteroid.size / 2,
+                y: asteroid.y + Math.random() * asteroid.size - asteroid.size / 2
+            },
+            type: Powerup.FUEL,
+            id: nextPowerupId++
+        }
+        io.sockets.emit('newPowerup', fuel);
+        powerups.push(fuel);
     }
 }
 
@@ -143,8 +189,7 @@ function moveAsteroids() {
     }
 }
 
-const enemyChancePerTick = 0.01;
-const enemyLimit = 20;
+
 var nextEnemyId = 0;
 
 //might spawn an enemy, taking into account the chance of one per tick, and the limit
@@ -152,8 +197,8 @@ function doNewEnemies() {
     if (Math.random() < enemyChancePerTick && enemies.length < enemyLimit) {
         var x = Math.random() * mapWidth;
         var y = Math.random() * mapHeight;
-        var vx = Math.random() * 50 - 25;
-        var vy = Math.random() * 50 - 25;
+        var vx = 0;
+        var vy = 0;
         enemies.push(
             new Enemy(nextEnemyId++, x, y, vx, vy)
         )
@@ -161,14 +206,12 @@ function doNewEnemies() {
 }
 
 //milliseconds between each heartbeat() call
-var tickTime = 33
 setInterval(heartbeat, tickTime);
-const timeoutMillis = 10000;
+
 
 var powerups = []
 var nextPowerupId = 0;
-const powerupChancePerTick = 0.1;
-const powerupLimit = 25;
+
 
 //might spawn a powerup, taking into account the chance of one per tick, and the limit
 function doNewPowerups() {
@@ -187,9 +230,63 @@ function doNewPowerups() {
     }
 }
 
+function getNearestPlayer(x, y) {
+    var nearestPlayer = null;
+    var nearestDistance = Number.MAX_VALUE;
+    for (var i = 0; i < players.length; i++) {
+        var player = players[i];
+        var distance = Math.sqrt(Math.pow(player.x - x, 2) + Math.pow(player.y - y, 2));
+        if (distance < nearestDistance) {
+            nearestPlayer = player;
+            nearestDistance = distance;
+        }
+    }
+    return nearestPlayer;
+}
+
+function tickEnemies() {
+    if (players.length === 0) {
+        return
+    }
+    for (var i = 0; i < enemies.length; i++) {
+        var nearestPlayer = getNearestPlayer(enemies[i].x, enemies[i].y);
+        var dx = nearestPlayer.x - enemies[i].x;
+        var dy = nearestPlayer.y - enemies[i].y;
+        var angle = Math.atan2(-dy, dx);
+        var degrees = angle * 180 / Math.PI;
+        enemies[i].angle = degrees;
+
+        
+        enemies[i].x += Math.cos(angle) * enemyMaxSpeed;
+        enemies[i].y += -Math.sin(angle) * enemyMaxSpeed;
+
+        if (Math.random() < enemyShootChancePerTick) {
+            var enemy = enemies[i];
+            var shot = {
+                pos: {
+                    x: enemy.x,
+                    y: enemy.y
+                },
+                vel: {
+                    x: enemyBulletSpeed * Math.cos(angle),
+                    y: -enemyBulletSpeed * Math.sin(angle)
+                },
+                size: 10,
+                teamColor: new Color(255, 255, 255),
+                attack: enemy.attack,
+                owner: null,
+                timeout: 10000
+            }
+
+            io.sockets.emit('enemyShoot', shot);
+        }
+    }
+}
+
 //things to run every tick
 function heartbeat() {
     GameWon(players);
+
     var toRemove = [];
     for (var i = 0; i < players.length; i++) {
         //if now - players.lastPing > timeoutMillis
@@ -210,6 +307,7 @@ function heartbeat() {
     players = newPlayers;
     doNewPowerups();
     doNewAsteroids();
+    doNewEnemies();
     for (var i = 0; i < asteroids.length; i++) {
         //remove asteroid
         if (asteroids[i].health <= 0) {
@@ -217,6 +315,7 @@ function heartbeat() {
         }
     }
     moveAsteroids();
+    tickEnemies()
     //doNewEnemies();
     /*for (var i = 0; i < enemies.length; i++) {
         //remove enemy
@@ -228,6 +327,7 @@ function heartbeat() {
         players: players,
         newProjectiles: newProjectiles,
         asteroids : asteroids,
+        enemies: enemies
     });
     newProjectiles = [];
 }
@@ -245,6 +345,7 @@ function newConnection(socket) {
     socket.on('meeleAttack', meeleAttack)
     socket.on('expirePowerup', expirePowerup)
     socket.on('damageAsteroid', damageAsteroid)
+    socket.on('damageEnemy', damageEnemy)
 
     function Start(data) {
         //console.log(socket.id + ' ' + data.x + ' ' + data.y);
@@ -293,8 +394,8 @@ function newConnection(socket) {
         function toRadians(deg) {
             return deg * (Math.PI / 180);
         }
-        var xvel = Math.cos(toRadians(angle)) * 10;
-        var yvel = -Math.sin(toRadians(angle)) * 10;
+        var xvel = Math.cos(toRadians(angle)) * bulletSpeed;
+        var yvel = -Math.sin(toRadians(angle)) * bulletSpeed;
 
         var projectile = {
             pos: {
@@ -324,7 +425,7 @@ function newConnection(socket) {
             enemy = getRandomTeam(player)
         }
         player.teamColor = enemy;
-        player.health=50;
+        player.health=playerMaxHealth;
         //randomize x and y
         player.x = Math.floor(Math.random() * 20) + 1;
         player.y = Math.floor(Math.random() * 20) + 1;
@@ -404,8 +505,8 @@ function newConnection(socket) {
             return;
         }
         var p = players[d]
-        var swordWidth = p.size * 4;
-        var swordHeight = p.size * 4;
+        var swordWidth = p.size * swordSizeMultiplier;
+        var swordHeight = p.size * swordSizeMultiplier;
 	    var x = p.x + Math.cos(p.angle * Math.PI / 180) * (swordWidth / 2 + p.size * 2);
 	    var y = p.y - Math.sin(p.angle * Math.PI / 180) * (swordWidth / 2 + p.size * 2);
 	    //swordEntity = new Sword(x, y, player.angle, swordWidth, swordHeight, 1000);
@@ -413,10 +514,11 @@ function newConnection(socket) {
             x: x,
             y: y,
             angle: p.angle,
-            attack: 10,
-            size: p.size * 4,
-            duration: 1000,
-            teamColor: p.teamColor
+            attack: swordAttack,
+            size: p.size * swordSizeMultiplier,
+            duration: swordDuration,
+            teamColor: p.teamColor,
+            id: socket.id
         }
         io.sockets.emit('meeleAttack', swordEntity);
     }
@@ -448,8 +550,24 @@ function newConnection(socket) {
         }
         console.log(d, damage)
         asteroids[d].health -= damage;
+        asteroids[d].vx = asteroids[d].vx + (data.bvelx * (1 / asteroids[d].size) * 50);
+        asteroids[d].vy = asteroids[d].vy + (data.bvely * (1 / asteroids[d].size) * 50);
         if (asteroids[d].health <= 0) {
+            spawnFuelFromAsteroidBreak(asteroids[d]);
             asteroids.splice(d, 1);
+        }
+    }
+
+    function damageEnemy(data) {
+        var d = getEnemyIndex(data.id);
+        if (d === undefined) {
+            console.log("Warning: enemy not found in damage enemy function");
+            return;
+        }
+
+        enemies[d].health -= data.attack;
+        if (enemies[d].health <= 0) {
+            enemies.splice(d, 1);
         }
     }
 }
@@ -497,6 +615,15 @@ function getPowerupIndex(id) {
     }
 }
 
+//get enemy index given enemy id
+function getEnemyIndex(id) {
+    for (var i = 0; i < enemies.length; i++) {
+        if (enemies[i].id === id) {
+            return i;
+        }
+    }
+}
+
 //get player index given player id
 function getIndex(id) {
     for (var i = 0; i < players.length; i++) {
@@ -525,7 +652,7 @@ function GameWon(players) {
             gameWon = false;
         } else if (samecolor === true && (players.length > 1)) {
             gameWon = true;
-            //socket.emit('gameWon', gameWon);
+            io.sockets.emit('gameWon', gameWon);
         }
     } else {
         gameWon = false;

@@ -138,7 +138,6 @@ effect: the server will remove this powerup effect
 
 damageAsteroid:
 C -> S
-S -> C
 data: {
 	Number id: the id of the asteroid
 	Number damage: the damage to be done to the asteroid
@@ -150,6 +149,19 @@ changeName:
 C -> S
 data: new name
 effect: the server will change the player's name when it recieves this packet
+
+damageEnemy:
+C -> S
+data: {
+	Number id: the id of the enemy
+	Number damage: the damage to be done to the enemy
+}
+effect (server): the server will damage the enemy when it recieves this packet
+
+enemyShoot:
+S -> C
+data: {
+
 */
 
 //if you change these, also change them in server.js
@@ -262,25 +274,27 @@ function setup() {
 				new Color(255, 255, 255)
 			)
 			asteroid.id = newAsteroids[i].id;
-			asteroid.size = 50
+			asteroid.size = newAsteroids[i].size;
 			asteroid.maxHealth = 10
 		    asteroids.push(asteroid)
 		}
 		
-		//convert list of enemies into entities
-		/*var enemies = data['enemies'];
-		for (var i = 0; i < enemies.length; i++) {
-			enemies.push(
-				new HealthEntity(
-					enemies[i].x,
-					enemies[i].y,
-					enemies[i].health,
-					0,
-					0,
-					new Color(255, 255, 255)
-				)
+		enemies = []
+		var newEnemies = data['enemies'];
+		for (var i = 0; i < newEnemies.length; i++) {
+			var enemy = new HealthEntity(
+				newEnemies[i].x,
+				newEnemies[i].y,
+				newEnemies[i].health,
+				newEnemies[i].attack,
+				newEnemies[i].speed,
+				new Color(255, 255, 255)
 			)
-		}*/
+			enemy.size = newEnemies[i].size
+			enemy.id = newEnemies[i].id
+			enemy.angle = newEnemies[i].angle
+			enemies.push(enemy)
+		}
 		socket.emit('heartbeatReply', {});
 	})
 
@@ -308,7 +322,7 @@ function setup() {
 	})
 
 	socket.on('meeleAttack', function (data) {
-		swords.push(new Sword(
+		var newSword = new Sword(
 			data.x,
 			data.y,
 			data.angle,
@@ -316,7 +330,34 @@ function setup() {
 			data.attack,
 			data.duration,
 			data.teamColor
-		))
+		)
+		swords.push(newSword)
+		if (data.id === socket.id) {
+			mySword = newSword
+			console.log(mySword)
+		}
+	})
+
+	socket.on('gameWon', function (gameWon) {
+		if (gameWon) {
+			isGameOver = true;
+        }
+    })
+
+	socket.on('enemyShoot', function (data) {
+		var newProjectile = new Entity(
+			data.pos.x,
+			data.pos.y,
+			createVector(data.vel.x, data.vel.y).mag(),
+			data.attack,
+			data.size,
+			data.teamColor
+		);
+		newProjectile.vel.x = data.vel.x;
+		newProjectile.vel.y = data.vel.y;
+		newProjectile.owner = data.id;
+		newProjectile.setTimeout(data.timeout);
+		projectiles.push(newProjectile);
 	})
 }
 
@@ -356,8 +397,25 @@ function takeDamage(amount, attackingTeam) {
 	socket.emit('changeHealth', data);
 }
 
-function gameOver() {
+//enemy is an enemy object, attack is a number
+function damageEnemy(enemy, attack) {
+	socket.emit('damageEnemy', {
+		id: enemy.id,
+		attack: attack
+	})
+}
 
+//display game over
+function gameOver() {
+	background(0);
+	push()
+	stroke(player.teamColor.r + 10, player.teamColor.g + 10, player.teamColor.b + 10);
+	strokeWeight(10);
+	fill(player.teamColor.r, player.teamColor.g, player.teamColor.b);
+	textAlign(CENTER);
+	textSize(70);
+	text("You are all Connected now!", windowWidth / 2, windowHeight / 5);
+	pop()
 }
 
 function draw() {
@@ -376,6 +434,9 @@ function draw() {
 			}
 		}
 		console.log("Found me! " + player.teamColor);
+	}
+	if (player.teamColor === null) {
+		return
 	}
 	
 	//the closest distance a player can get to edge of the screen without the camera attempting to move
@@ -480,6 +541,175 @@ function draw() {
 		player.angle = newAngle;
 	}
 
+	function isXYXYCollision(xy1, xy2) {
+		var collisionDist = xy1.size + xy2.size;
+		var dist = Math.sqrt(Math.pow(xy1.x - xy2.x, 2) + Math.pow(xy1.y - xy2.y, 2));
+		return dist < collisionDist;
+	}
+	function isPosXYCollision(pos, xy) {
+		var collisionDist = xy.size + pos.size;
+		var dist = Math.sqrt(Math.pow(xy.x - pos.pos.x, 2) + Math.pow(xy.y - pos.pos.y, 2));
+		return dist < collisionDist;
+	}
+	function isPosPosCollision(pos1, pos2) {
+		return pos1.isCollided(pos2)
+	}
+	
+	if (player.health > 0) {
+		//asteroids
+		for (var i = 0; i < asteroids.length; i++) {
+			if(isPosPosCollision(player, asteroids[i])) {
+				takeDamage(asteroids[i].attack, new Color(255, 255, 255))
+				if (player.teamColor === null) {
+					return
+				}
+			}
+		}
+
+		//other projectiles
+		for (var i = 0; i < projectiles.length; i++) {
+			if (projectiles[i].isExpired()) {
+				projectiles.splice(i, 1);
+				i--;
+				continue;
+			}
+			console.log(projectiles[i].teamColor, player.teamColor);
+			if(colorsEqual(projectiles[i].teamColor, player.teamColor)) {
+				continue;
+			} else if (isPosPosCollision(player, projectiles[i])) {
+				takeDamage(projectiles[i].attack, projectiles[i].teamColor)
+				if (player.teamColor === null) {
+					return
+				}
+				player.vel.x = player.vel.x + (projectiles[i].vel.x * 0.5);
+				player.vel.y = player.vel.y + (projectiles[i].vel.y * 0.5);
+				projectiles.splice(i, 1);
+				i--;
+			}
+		}
+
+		//powerups
+		for (var i = 0; i < powerups.length; i++) {
+			if (isPosPosCollision(player, powerups[i])) {
+				powerupSound.play();
+				socket.emit('collectPowerup', powerups[i].id);
+				powerups[i].apply(player);
+				if (powerups[i].hasActiveEffect()) {
+					var effect = powerups[i].getActiveEffect();
+					activeEffects.push(effect);
+				}
+				powerups.splice(i, 1);
+				i--;
+			}
+		}
+
+		for (var i = 0; i < swords.length; i++) {
+			if (swords[i].isExpired()) {
+				swords.splice(i, 1);
+				i--;
+				continue;
+			}
+			if (colorsEqual(player.teamColor, swords[i].teamColor) || swords[i].used) {
+				continue;
+			}
+			if(isPosPosCollision(player, swords[i])) {
+				takeDamage(swords[i].attack, swords[i].teamColor);
+				if (player.teamColor === null)
+					return
+				swords[i].used = true;
+			}
+		}
+	}
+
+	//loop group 2: projectile loop
+	for (var j = 0; j < projectiles.length; j++) {
+		var skip = false
+		for (var i = 0; i < players.length; i++) {
+			if (players[i].id === socket.id || players[i].health <= 0) {
+				continue;
+			}
+			if(colorsEqual(projectiles[j].teamColor, players[i].teamColor)) {
+				continue;
+			}
+			if(isPosXYCollision(projectiles[j], players[i])) {
+				projectiles.splice(j, 1);
+				j--;
+				skip = true;
+				break
+			}
+		}
+
+		if (skip) {
+			continue
+		}
+		skip = false
+
+		for (var i = 0; i < enemies.length; i++) {
+			if (enemies[i].health <= 0) {
+				break;
+			}
+			if(colorsEqual(projectiles[j].teamColor, enemies[i].teamColor)) {
+				continue;
+			}
+			if(isPosPosCollision(projectiles[j], enemies[i])) {
+				damageEnemy(enemies[i], projectiles[j].attack);
+				projectiles.splice(j, 1);
+				j--;
+				skip = true;
+				break
+			}
+		}
+
+		if (skip) {
+			continue
+		}
+
+		//our projectiles vs asteroids
+		if (projectiles[j].owner === socket.id) {
+			for (var i = 0; i < asteroids.length; i++) {
+				if(asteroids[i].isCollided(projectiles[j])) {
+					//this is our projectile
+					socket.emit('damageAsteroid', {
+						id: asteroids[i].id,
+						damage: projectiles[j].attack,
+						bvelx: projectiles[j].vel.x,
+						bvely: projectiles[j].vel.y
+					})
+				
+					projectiles.splice(j, 1);
+					j--;
+					break
+				}
+			}
+		}
+
+		//loop group 3: sword loop
+		if (mySword !== undefined && !mySword.isExpired() && !mySword.used) {
+			//for each enemy
+			for (var i = 0; i < enemies.length; i++) {
+				if (enemies[i].health <= 0) {
+					continue;
+				}
+				if(isPosPosCollision(mySword, enemies[i])) {
+					mySword.used = true;
+					damageEnemy(enemies[i], mySword.attack);
+				}
+			}
+
+			//for each asteroid
+			for (var i = 0; i < asteroids.length; i++) {
+				if(isPosPosCollision(mySword, asteroids[i])) {
+					mySword.used = true;
+					socket.emit('damageAsteroid', {
+						id: asteroids[i].id,
+						damage: mySword.attack
+					})
+				}
+			}
+		}
+	}
+
+	/*
 	//collision for us
 	for (var j = 0; j < projectiles.length; j++) {
 		if (projectiles[j].isExpired()) {
@@ -491,6 +721,8 @@ function draw() {
 			continue;
 		}else if( player.isCollided(projectiles[j]) && player.health > 0) {
 			takeDamage(projectiles[j].attack, projectiles[j].teamColor)
+			player.vel.x = player.vel.x + (projectiles[j].vel.x * 0.5);
+			player.vel.y = player.vel.y + (projectiles[j].vel.y * 0.5);
 			projectiles.splice(j, 1);
 			j--;
 		}
@@ -510,7 +742,6 @@ function draw() {
 			if(asteroids[i].isCollided(projectiles[j])) {
 				if (projectiles[j].id === player.id) {
 					//this is our projectile
-					console.log(asteroids)
 					socket.emit('damageAsteroid', {
 						id: asteroids[i].id,
 						damage: projectiles[j].attack
@@ -542,17 +773,6 @@ function draw() {
 				projectiles.splice(j, 1);
 				j--;
 			}
-		}
-	}
-	
-	//check for active effect expiration
-	for (var i = 0; i < activeEffects.length; i++) {
-		var effect = activeEffects[i];
-		if (effect.isExpired()) {
-			effect.unApply(player)
-			socket.emit('expirePowerup', effect.type)
-			activeEffects.splice(i, 1);
-			i--;
 		}
 	}
 	
@@ -591,6 +811,17 @@ function draw() {
 		if(isCollided) {
 			takeDamage(swords[i].attack, swords[i].teamColor);
 			swords[i].used = true;
+		}
+	}*/
+
+	//check for active effect expiration
+	for (var i = 0; i < activeEffects.length; i++) {
+		var effect = activeEffects[i];
+		if (effect.isExpired()) {
+			effect.unApply(player)
+			socket.emit('expirePowerup', effect.type)
+			activeEffects.splice(i, 1);
+			i--;
 		}
 	}
 
@@ -637,19 +868,38 @@ function draw() {
 		image(pship, 0, 0, players[i].size * 3.5, players[i].size * 3.5);
 		pop();
 		
-		//max health bar (black)
-		fill(0, 0, 0);
-		rect(players[i].x- camera.x -20, players[i].y  - camera.y + 25, player.maxHealth, 10);
+		//max health bar (dark-grey)
+		fill(40);
+		rect(players[i].x- camera.x -23, players[i].y  - camera.y + 30, player.maxHealth, 10);
 		
 		//current health bar (same as player color)
 		fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
-		rect(players[i].x - camera.x -20, players[i].y - camera.y + 25, players[i].health, 10);
-		
-		//display player name
-		fill(255);
-		textAlign(CENTER);
-		textSize(200 / (players[i].name.length + 15));
-		text(players[i].name, players[i].x - camera.x, players[i].y - camera.y + (players[i].size + 20));
+		rect(players[i].x - camera.x - 23, players[i].y - camera.y + 30, players[i].health, 10);
+
+		if (players[i].id === socket.id) {
+			//max fuel bar (dark-grey)
+			fill(40);
+			rect(players[i].x - camera.x - 23, players[i].y - camera.y + 42, (3 * 0.33) * player.maxHealth, 5);
+
+			//current fuel bar (blue)
+			fill(97, 242, 255);
+			rect(players[i].x - camera.x - 23, players[i].y - camera.y + 42, (player.fuel * 0.33) * player.maxHealth, 5);
+			rect(players[i].x - camera.x - 23 + (0.33 * player.maxHealth), players[i].y - camera.y + 42, 1, 5);
+			rect(players[i].x - camera.x - 23 + (0.66 * player.maxHealth), players[i].y - camera.y + 42, 1, 5);
+
+			//display your player name
+			fill(255);
+			textAlign(CENTER);
+			textSize(200 / (players[i].name.length + 15));
+			text(players[i].name, players[i].x - camera.x, players[i].y - camera.y + (players[i].size + 37));
+
+		} else {
+			//display other players name
+			fill(255);
+			textAlign(CENTER);
+			textSize(200 / (players[i].name.length + 15));
+			text(players[i].name, players[i].x - camera.x, players[i].y - camera.y + (players[i].size + 30));
+        }
 	}
 	//render projectiles
 	for (var i = projectiles.length - 1; i >= 0; i--) {
@@ -662,18 +912,21 @@ function draw() {
 	for (var i = powerups.length - 1; i >= 0; i--) {
 		var p = powerups[i];
 
+		fill(255, 255, 255)
+		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size * 5, p.size * 5);
+
 		//red triangle for health
 		if(powerups[i].type === Powerup.HEALTH){
 			fill(255, 0, 0);
 			triangle(p.pos.x - camera.x, p.pos.y - camera.y, p.pos.x - camera.x + p.size, p.pos.y - camera.y, p.pos.x - camera.x + p.size/2, p.pos.y - camera.y + p.size);
-		} else if(powerups[i].id === Powerup.SPEED){
+		} else if(powerups[i].type === Powerup.SPEED){
 			fill(255, 255, 255);
 			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 			fill(0, 255, 0);
 			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 
-		}else if(powerups[i].id === Powerup.ATTACK){
+		}else if(powerups[i].type === Powerup.ATTACK){
 			fill(0,20,200);
 			ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 
@@ -681,6 +934,9 @@ function draw() {
 			fill(0,0,0);
 			textAlign(CENTER);
 			text("Zoom", p.pos.x - camera.x, p.pos.y - camera.y + (p.size + 20));
+		} else if (powerups[i].type === Powerup.FUEL) {
+			fill(90, 252, 193)
+			ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 		}
 	}
 
@@ -692,12 +948,21 @@ function draw() {
 	}	
 
 	//render enemies
-	/*for (var i = enemies.length - 1; i >=0; i --) {
+	for (var i = enemies.length - 1; i >= 0; i--) {
 		var p = enemies[i];
-		fill(107, 88, 83);
-		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
-
-	}*/
+		push();
+		fill(137, 161, 161);
+		angleMode(DEGREES)
+		translate(enemies[i].pos.x - camera.x, enemies[i].pos.y - camera.y);
+		rotate(-enemies[i].angle + 90);
+		beginShape();
+		vertex(0, -enemies[i].size * 2);
+		vertex(-enemies[i].size, enemies[i].size * 2);
+		vertex(0, -enemies[i].size + enemies[i].size * 2);
+		vertex(enemies[i].size, enemies[i].size * 2);
+		endShape(CLOSE);
+		pop();
+	}
 
 	//render swords
 	//currently in a broken state
@@ -728,6 +993,7 @@ function draw() {
 }
 
 var swords = []
+var mySword
 //in milliseconds:
 const swordCooldown = 1000;
 var lastSwordTime = -10000;
@@ -769,12 +1035,19 @@ function keyTyped(){
 		socket.emit('shoot', player.attackSize)
 		blasterSound.play();
 	}
+	//k for meele
 	if (keyCode === 107 || keyCode === 75) {
 		meeleAttack()
+	}
+	//e for dash
+	if (keyCode === 101 || keyCode === 69) {
+		player.dash();	
 	}
 }
 
 function mouseClicked(){
-	socket.emit('shoot', player.attackSize)
-	blasterSound.play();
+	if (!isGameOver) {
+		socket.emit('shoot', player.attackSize)
+		blasterSound.play();
+	}
 }

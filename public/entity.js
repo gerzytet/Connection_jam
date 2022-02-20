@@ -72,7 +72,8 @@ class Sword extends Entity {
 	}
 }
 
-const dashDistance = 100
+const dashDistance = 200
+const tankCapacity = 3
 class HealthEntity extends Entity {
 
 	constructor(x, y, health, attack, speed, teamColor = new Color(255,0,0), attackSize = 10) {
@@ -83,7 +84,7 @@ class HealthEntity extends Entity {
 		this.attackSpeed = speed + 4;
 		this.attackSize = attackSize;
 		this.teamColor = teamColor;
-		this.boost = 2.0;
+		this.fuel = 3
 	}
 
 	isAlive() {
@@ -98,8 +99,17 @@ class HealthEntity extends Entity {
 	}
 
 	dash() {
+		if (this.fuel === 0) {
+			return;
+		}
+		this.fuel--
 		this.pos.x += dashDistance * cos(this.angle);
-		this.pos.y += dashDistance * sin(this.angle);
+		this.pos.y -= dashDistance * sin(this.angle);
+	}
+
+	addFuel(amount) {
+		this.fuel += amount
+		this.fuel = min(this.fuel, tankCapacity)
 	}
 }
 
@@ -109,6 +119,7 @@ make a new static variable here, and in the server.js powerups class
 modify colorFromType and apply
 in server.js, modify randomPowerupType so the server will spawn them
 modify applyPowerup in server.js
+make them render in the draw funciton
 
 if the powerup has an effect that needs to expire
 {
@@ -124,6 +135,7 @@ class Powerup extends Entity {
 	static HEAL = 0;
 	static SPEED = 1;
 	static ATTACK = 2;
+	static FUEL = 3
 
 	//given powerup type, return color object
 	static colorFromType(type) {
@@ -134,6 +146,8 @@ class Powerup extends Entity {
 				return new Color(118, 200, 214);
 			case Powerup.ATTACK:
 				return new Color(255, 0, 0);
+			case Powerup.FUEL:
+				return new Color(90, 252, 193);
 			default:
 				return new Color(255, 255, 255);
 		}
@@ -156,6 +170,9 @@ class Powerup extends Entity {
 				break;
 			case Powerup.ATTACK:
 				player.attack *= 2;
+				break;
+			case Powerup.FUEL:
+				player.addFuel(1);
 				break;
 		}
 	}
