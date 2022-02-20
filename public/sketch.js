@@ -6,6 +6,7 @@
 */
 
 var sounds = ['library/blaster.mp3', 'library/boost.mp3', 'library/laser_sword.mp3', 'library/powerup.mp3', 'library/explosion.mp3'];
+//'library/sword-hit.mp3'
 
 var blasterSound = new Howl({
 	src:[sounds[0]],
@@ -29,6 +30,12 @@ var explosionSound = new Howl({
 	loop: false,
 	volume: 0.2
 });
+/*var swordHitSound = new Howl({
+	src:[sounds[5]],
+	loop: false,
+	volume: 0.5
+});
+*/
 
 //howler crap
 //const {Howl, Howler} = require('howler');
@@ -243,7 +250,7 @@ function setup() {
 	textAlign(CENTER);
 	textSize(50);
 	
-	socket = io.connect("165.232.140.124:3000");
+	socket = io.connect();
 	
 	//TODO
 	//mapWidth/5 is just a testing artefact, so players spawn close together. replace with undivided values in final
@@ -586,7 +593,6 @@ function draw() {
 		for (var i = 0; i < asteroids.length; i++) {
 			if(isPosPosCollision(player, asteroids[i])) {
 				takeDamage(asteroids[i].attack, new Color(255, 255, 255))
-				explosionSound.play();
 				if (player.teamColor === null) {
 					return
 				}
@@ -605,7 +611,6 @@ function draw() {
 				continue;
 			} else if (isPosPosCollision(player, projectiles[i])) {
 				takeDamage(projectiles[i].attack, projectiles[i].teamColor);
-				explosionSound.play();
 				if (player.teamColor === null) {
 					return
 				}
@@ -642,7 +647,7 @@ function draw() {
 			}
 			if(isPosPosCollision(player, swords[i])) {
 				takeDamage(swords[i].attack, swords[i].teamColor);
-				explosionSound.play();
+				//swordHitSound.play();
 				if (player.teamColor === null)
 					return
 				swords[i].used = true;
@@ -682,7 +687,6 @@ function draw() {
 			}
 			if(isPosPosCollision(projectiles[j], enemies[i])) {
 				damageEnemy(enemies[i], projectiles[j].attack);
-				explosionSound.play();
 				projectiles.splice(j, 1);
 				j--;
 				skip = true;
@@ -723,7 +727,6 @@ function draw() {
 				if(isPosPosCollision(mySword, enemies[i])) {
 					mySword.used = true;
 					damageEnemy(enemies[i], mySword.attack);
-					explosionSound.play();
 				}
 			}
 
