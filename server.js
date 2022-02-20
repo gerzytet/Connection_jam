@@ -18,7 +18,10 @@ const mapHeight = 2000;
 class Powerup {
     static HEAL = 0;
     static SPEED = 1;
+    static ATTACK = 2;
 }
+
+//apply powerup effects to server-side players
 function applyPowerup(player, type) {
     switch (type) {
         case Powerup.HEAL:
@@ -27,10 +30,13 @@ function applyPowerup(player, type) {
         case Powerup.SPEED:
             //no server side changes necessary
             break;
+        case Powerup.ATTACK:
+            player.attack *= 2;
+            break;
     }
 }
 function randomPowerupType() {
-    return Math.floor(Math.random() * 2);
+    return Math.floor(Math.random() * 3);
 }
 
 app.use(express.static('public'))
@@ -52,7 +58,8 @@ var players = []
 var colors = [(255)];
 io.sockets.on('connection', newConnection)
 
-
+var asteroids = [];
+var enemies = [];
 
 class Player {
     constructor(id,name, x, y, c) {
@@ -67,17 +74,105 @@ class Player {
     };
 }
 
+class Asteroid {
+    constructor(id, x, y, vx, vy) {
+        this.id = id;
+        this.x = x;
+        this.y = y;
+        //pixels per second
+        this.vx = vx;
+        this.vy = vy;
+        this.size = 20;
+        this.health = 10;
+    };
+}
+
+class Enemy {
+    constructor(id, x, y, vx, vy) {
+        this.id = id;
+        this.x = x;
+        this.y = y;
+        //pixels per second
+        this.vx = vx;
+        this.vy = vy;
+        this.size = 20;
+        this.health = 20;
+        this.attack = 2.5;
+    };
+}
+
+const asteroidChancePerTick = 0.01;
+const asteroidLimit = 20;
+var nextAsteroidId = 0;
+//might spawn an asteroid, taking into account the chance of one per tick, and the limit
+function doNewAsteroids() {
+    if (Math.random() < asteroidChancePerTick && asteroids.length < asteroidLimit) {
+        var x = Math.random() * mapWidth;
+        var y = Math.random() * mapHeight;
+        var vx = Math.random() * 50 - 25;
+        var vy = Math.random() * 50 - 25;
+        asteroids.push(
+            new Asteroid(nextAsteroidId++, x, y, vx, vy)
+        )
+    }
+}
+
+//moves all asteroids
+//asteroids that hit the wall will reflect
+function moveAsteroids() {
+    for (var i = 0; i < asteroids.length; i++) {
+        var asteroid = asteroids[i];
+        asteroid.x += asteroid.vx * tickTime / 1000;
+        asteroid.y += asteroid.vy * tickTime / 1000;
+        if (asteroid.x < 0) {
+            asteroid.x = 0;
+            asteroid.vx = -asteroid.vx;
+        }
+        if (asteroid.x > mapWidth) {
+            asteroid.x = mapWidth;
+            asteroid.vx = -asteroid.vx;
+        }
+        if (asteroid.y < 0) {
+            asteroid.y = 0;
+            asteroid.vy = -asteroid.vy;
+        }
+        if (asteroid.y > mapHeight) {
+            asteroid.y = mapHeight;
+            asteroid.vy = -asteroid.vy;
+        }
+    }
+}
+
+const enemyChancePerTick = 0.01;
+const enemyLimit = 20;
+var nextEnemyId = 0;
+
+//might spawn an enemy, taking into account the chance of one per tick, and the limit
+function doNewEnemies() {
+    if (Math.random() < enemyChancePerTick && enemies.length < enemyLimit) {
+        var x = Math.random() * mapWidth;
+        var y = Math.random() * mapHeight;
+        var vx = Math.random() * 50 - 25;
+        var vy = Math.random() * 50 - 25;
+        enemies.push(
+            new Enemy(nextEnemyId++, x, y, vx, vy)
+        )
+    }
+}
+
+//milliseconds between each heartbeat() call
 var tickTime = 33
 setInterval(heartbeat, tickTime);
 const timeoutMillis = 10000;
 
 var powerups = []
 var nextPowerupId = 0;
-const powerupChancePerSecond = 0.1;
+const powerupChancePerTick = 0.1;
 const powerupLimit = 25;
 
+//might spawn a powerup, taking into account the chance of one per tick, and the limit
 function doNewPowerups() {
-    if (Math.random() < powerupChancePerSecond && powerups.length < powerupLimit) {
+    if (Math.random() < powerupChancePerTick && powerups.length < powerupLimit) {
         var powerup = {
             pos: {
                 //random between 0 and mapWidth
@@ -92,7 +187,9 @@ function doNewPowerups() {
     }
 }
 
+//things to run every tick
 function heartbeat() {
+    GameWon(players);
     var toRemove = [];
     for (var i = 0; i < players.length; i++) {
         //if now - players.lastPing > timeoutMillis
@@ -111,12 +208,28 @@ function heartbeat() {
         }
     }
     players = newPlayers;
+    doNewPowerups();
+    doNewAsteroids();
+    for (var i = 0; i < asteroids.length; i++) {
+        //remove asteroid
+        if (asteroids[i].health <= 0) {
+            toRemove.push(asteroids[i]);
+        }
+    }
+    moveAsteroids();
+    //doNewEnemies();
+    /*for (var i = 0; i < enemies.length; i++) {
+        //remove enemy
+        if (enemies[i].health <= 0) {
+            toRemove.push(enemies[i]);
+        }
+    }*/
     io.sockets.emit('heartbeat', {
         players: players,
-        newProjectiles: newProjectiles
+        newProjectiles: newProjectiles,
+        asteroids : asteroids,
     });
     newProjectiles = [];
-    doNewPowerups();
 }
 teams = [];
 openspace = false;
@@ -130,6 +243,9 @@ function newConnection(socket) {
     socket.on('changeName', changeName)
     socket.on('collectPowerup', collectPowerup)
     socket.on('meeleAttack', meeleAttack)
+    socket.on('expirePowerup', expirePowerup)
+    socket.on('damageAsteroid', damageAsteroid)
+
     function Start(data) {
         //console.log(socket.id + ' ' + data.x + ' ' + data.y);
         var c = (255)
@@ -157,7 +273,7 @@ function newConnection(socket) {
     function heartbeatReply(data) {
         var d = getIndex(socket.id);
         if (d === undefined) {
-            console.log("Warning: player not found in heartbeat function");
+            //console.log("Warning: player not found in heartbeat function");
             return;
         }
 
@@ -190,7 +306,9 @@ function newConnection(socket) {
                 y: yvel
             },
             teamColor: players[d].teamColor,
-            attack: players[d].attack
+            attack: players[d].attack,
+            owner: players[d].id,
+            size: data
         };
         newProjectiles.push(projectile);
     }
@@ -198,6 +316,13 @@ function newConnection(socket) {
     //player and enemy are player objects
     function switchTeam(player,enemy){
         console.log(enemy, players)
+        if (colorsEqual(enemy, {
+            r: 255,
+            g: 255,
+            b: 255
+        })) {
+            enemy = getRandomTeam(player)
+        }
         player.teamColor = enemy;
         player.health=50;
         //randomize x and y
@@ -223,14 +348,16 @@ function newConnection(socket) {
         if(players[d].health <= 0){
             console.log("dead " + d);
             switchTeam(players[d], data['newTeam']);
-
         }
     }
 
     function changeName(data) {
-        console.log(data.newName)
-        players[data.i].name = data.newName;
-        console.log(players[data.i].name)
+        var d = getIndex(socket.id);
+        if (d === undefined) {
+            console.log("Warning: player not found in change name function");
+            return;
+        }
+        players[d].name = data;
     }
 
     function collectPowerup(data) {
@@ -293,8 +420,75 @@ function newConnection(socket) {
         }
         io.sockets.emit('meeleAttack', swordEntity);
     }
+
+    function expirePowerup(data) {
+        var type = data;
+        var d = getIndex(socket.id);
+        if (d === undefined) {
+            console.log("Warning: player not found in expire powerup function");
+            return;
+        }
+
+        switch (type) {
+            case Powerup.ATTACK:
+                players[d].attack /= 2;
+                break;
+            default:
+                //no changes necessary
+        }
+    }
+
+    function damageAsteroid(data) {
+        var id = data.id
+        var damage = data.damage
+        var d = getAsteroidIndex(id);
+        if (d === undefined) {
+            console.log("Warning: asteroid not found in damage asteroid function");
+            return;
+        }
+        console.log(d, damage)
+        asteroids[d].health -= damage;
+        if (asteroids[d].health <= 0) {
+            asteroids.splice(d, 1);
+        }
+    }
 }
 
+function getAsteroidIndex(id) {
+    for (var i = 0; i < asteroids.length; i++) {
+        if (asteroids[i].id === id) {
+            return i;
+        }
+    }
+    return undefined;
+}
+
+function colorsEqual(c1, c2) {
+    return c1.r === c2.r && c1.g === c2.g && c1.b === c2.b;
+}
+
+function getRandomTeam(player) {
+    var allTeams = []
+    for (var i = 0; i < players.length; i++) {
+        //check if players[i].teamColor is already in allTeams
+        var found = false;
+        for (var j = 0; j < allTeams.length; j++) {
+            if (colorsEqual(players[i].teamColor, allTeams[j])) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            allTeams.push(players[i].teamColor);
+        }
+    }
+
+    var index = Math.floor(Math.random() * allTeams.length);
+
+	return allTeams[index];
+}
+
+//get powerup index given powerup id
 function getPowerupIndex(id) {
     for (var i = 0; i < powerups.length; i++) {
         if (powerups[i].id === id) {
@@ -303,6 +497,7 @@ function getPowerupIndex(id) {
     }
 }
 
+//get player index given player id
 function getIndex(id) {
     for (var i = 0; i < players.length; i++) {
         //console.log(i + ' ' + (id === players[i].id))
@@ -310,4 +505,31 @@ function getIndex(id) {
             return i;
         }
     }
+}
+
+//true if the game is over/won
+function GameWon(players) {
+    if (players.length !== 0) {
+        color1 = players[0].teamColor;
+        gameWon = false;
+        samecolor = false;
+        for (var i = 0; i < players.length; i++) {
+            if (color1.r === players[i].teamColor.r && color1.g === players[i].teamColor.g && color1.b === players[i].teamColor.b) {
+                samecolor = true;
+            } else {
+                samecolor = false;
+                break;
+            }
+        }
+        if (samecolor === false) {
+            gameWon = false;
+        } else if (samecolor === true && (players.length > 1)) {
+            gameWon = true;
+            //socket.emit('gameWon', gameWon);
+        }
+    } else {
+        gameWon = false;
+    }
+    
+    //console.log("Game Won: " + gameWon);
 }

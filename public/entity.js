@@ -42,6 +42,8 @@ class Entity {
 		this.pos.y += this.vel.y;
 		this.pos.x = max(this.pos.x, 0)
 		this.pos.y = max(this.pos.y, 0)
+		this.pos.x = min(this.pos.x, mapWidth);
+		this.pos.y = min(this.pos.y, mapHeight);
 	}
 
 	isCollided(other) {
@@ -50,37 +52,38 @@ class Entity {
 		return distance < this.size + other.size;
 	}
 
-	startTime(time) {
-		// remove item after a time period
-
+	setTimeout(duration) {
+		this.start = millis()
+		this.duration = duration
 	}
 
+	isExpired() {
+		return millis() - this.start > this.duration;
+	}
 }
 
 class Sword extends Entity {
 	constructor(x, y, angle, size, attack, duration, teamColor) {
 		super(x, y, 0, attack, size, teamColor)
 		this.angle = angle
-		this.duration = duration
+		this.setTimeout(duration)
 		this.startTime = millis()
 		this.used = false;
 	}
-
-	isExpired() {
-		return millis() - this.startTime > this.duration;
-	}
 }
 
+const dashDistance = 100
 class HealthEntity extends Entity {
 
-	constructor(x, y, health, attack, speed, teamColor = new Color(255,0,0)) {
+	constructor(x, y, health, attack, speed, teamColor = new Color(255,0,0), attackSize = 10) {
 		super(x, y, speed, attack, 10, 0);
 		this.maxHealth = health;
 		this.health = health;
 		this.speed = speed;
 		this.attackSpeed = speed + 4;
+		this.attackSize = attackSize;
 		this.teamColor = teamColor;
-		this.boost = 0.0;
+		this.boost = 2.0;
 	}
 
 	isAlive() {
@@ -93,21 +96,44 @@ class HealthEntity extends Entity {
 		bullet.vel.y = this.attackSpeed * sin(this.angle);
 		return bullet;
 	}
+
+	dash() {
+		this.pos.x += dashDistance * cos(this.angle);
+		this.pos.y += dashDistance * sin(this.angle);
+	}
 }
 
+/*
+to add a new type of powerup:
+make a new static variable here, and in the server.js powerups class
+modify colorFromType and apply
+in server.js, modify randomPowerupType so the server will spawn them
+modify applyPowerup in server.js
+
+if the powerup has an effect that needs to expire
+{
+	modify hasActiveEffect, getActiveEffect
+	modify unApply in ActiveEffect
+	modify expirePowerup in server.js
+}
+*/
 class Powerup extends Entity {
 	//x and y are the same as parent
 	//Number type is the type of powerup
 	//Number id is a unique id for each powerup object
 	static HEAL = 0;
 	static SPEED = 1;
+	static ATTACK = 2;
 
+	//given powerup type, return color object
 	static colorFromType(type) {
 		switch (type) {
 			case Powerup.HEAL:
 				return new Color(212, 68, 235);
 			case Powerup.SPEED:
 				return new Color(118, 200, 214);
+			case Powerup.ATTACK:
+				return new Color(255, 0, 0);
 			default:
 				return new Color(255, 255, 255);
 		}
@@ -119,8 +145,7 @@ class Powerup extends Entity {
 		this.id = id;
 	}
 
-	//show is the same as parent
-
+	//apply this powerup to a player
 	apply(player) {
 		switch (this.type) {
 			case Powerup.HEAL:
@@ -129,11 +154,14 @@ class Powerup extends Entity {
 			case Powerup.SPEED:
 				player.maxSpeed *= 2;
 				break;
+			case Powerup.ATTACK:
+				player.attack *= 2;
+				break;
 		}
 	}
 
 	hasActiveEffect() {
-		return this.type == Powerup.SPEED;
+		return this.type == Powerup.SPEED || this.type == Powerup.ATTACK;
 	}
 
 	getActiveEffect() {
@@ -142,6 +170,8 @@ class Powerup extends Entity {
 		}
 		if (this.type == Powerup.SPEED) {
 			return new ActiveEffect(Powerup.SPEED, 10000);
+		} else if (this.type == Powerup.ATTACK) {
+			return new ActiveEffect(Powerup.ATTACK, 10000);
 		}
 	}
 }
@@ -164,6 +194,9 @@ class ActiveEffect {
 		switch (this.type) {
 			case Powerup.SPEED:
 				player.maxSpeed /= 2;
+				break;
+			case Powerup.ATTACK:
+				player.attack /= 2;
 				break;
 		}
 	}

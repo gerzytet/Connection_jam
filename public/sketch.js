@@ -5,14 +5,41 @@
 @brief File that controls the graphics on the canvas
 */
 
+var sounds = ['library/blaster.mp3', 'library/boost.mp3', 'library/laser_sword.mp3', 'library/powerup.mp3'];
+
+var blasterSound = new Howl({
+	src:[sounds[0]],
+	loop: false,
+	volume: 0.25
+});
+var boostSound = new Howl({
+	src:[sounds[1]],
+	loop: false
+});
+var laserSwordSound = new Howl({
+	src:[sounds[2]],
+	loop: false
+});
+var powerupSound = new Howl({
+	src:[sounds[3]],
+	loop: false
+});
+
+//howler crap
+//const {Howl, Howler} = require('howler');
+
 var socket
 var players = []
+
+const projectileTimeout = 5000;
 var projectiles = []
 var player
 var powerups = []
 var activeEffects = []
-var sounds = ["blaster.mp3", "powerup.mp3"]
+var asteroids = []
+var enemies = []
 
+//returns index of powerups array corresponding to the powerup id
 function getPowerupIndex(id) {
     for (var i = 0; i < powerups.length; i++) {
         if (powerups[i].id === id) {
@@ -21,54 +48,15 @@ function getPowerupIndex(id) {
     }
 }
 
-//IMPLEMENT SOUNDS!!!!!
-/*
-function preload(){
-	soundFormats('mp3');
-	powerupSound = loadSound('library/powerup.mp3');
-	blasterSound = loadSound('library/blaster.mp3');
+//return index of asteroids array corresponding to the asteroid id
+function getAsteroidIndex(id) {
+    for (var i = 0; i < asteroids.length; i++) {
+        if (asteroids[i].id === id) {
+            return i;
+        }
+    }
+    return undefined;
 }
-
-function playPowerupSound() {
-	powerupSound.play();
-	console.log("powerup sound");
-}
-
-function playBlasterSound() {
-	blasterSound.play();
-	console.log("blaster sound")
-}
-*/
-
-/*
-Player object:
-
-pos: p5 vector  (x, y) position.  Only exists on client side
-x: Number       x position.  Only exists on server side
-y: Number       y position.  Only exists on server side
-id: String      the socket id
-num: int        the player number
-size: int       the player size (basically a test value)
-lastPing: Date  the last time the player has replied to the server
-angle: Number   the angle of the player's sprite
-*/
-
-/*
-XY object:
-
-x: Number       the x position
-y: Number       the y position
-*/
-
-//the players array consists of a list of Player objects, as above
-//the players array has identical contents as the server-side players array
-
-/*
-Projectile object:
-pos:    p5 vector on client side, XY object on server side
-vel:    p5 vector on client side, XY object on server side.  measured in pixels per second
-owner:  num of the player who fired the projectile
-*/
 
 /*
 types of packets:
@@ -104,7 +92,7 @@ effect: the server will know that the client is still connected when it recieves
 
 shoot:
 C -> S
-data: empty object
+data: bullet size
 effect: the server will create a new projectile at the player's position when it recieves this packet
 
 changeHealth:
@@ -142,6 +130,26 @@ S -> C
 data: empty object from client to server, then sword object from server to client
 effect (server): the server will create a new meele attack at the player's position when it recieves this packet
 effect (client): the client will add this meele attack to its list
+
+expirePowerup:
+C -> S
+data: powerup type
+effect: the server will remove this powerup effect
+
+damageAsteroid:
+C -> S
+S -> C
+data: {
+	Number id: the id of the asteroid
+	Number damage: the damage to be done to the asteroid
+}
+effect (server): the server will damage the asteroid when it recieves this packet
+effect (client): the client will damage the asteroid when it recieves this packet
+
+changeName:
+C -> S
+data: new name
+effect: the server will change the player's name when it recieves this packet
 */
 
 //if you change these, also change them in server.js
@@ -150,9 +158,13 @@ const mapHeight = 2000;
 
 var cnv;
 var camera;
-let input, button;
-let img;
+var input, button;
+var img;
+var bg;
+var pship;
 //var PlayerShipImage = new Image();
+
+var isGameOver
 
 function centerCanvas() {
 	x = width / 2;
@@ -165,14 +177,25 @@ function windowResized() {
 	centerCanvas();
 }
 
+function preload() {
+	bg = loadImage('Sprites/Sprite_Background.png', () => {}, () => {
+		console.log("failed to load background");
+	});
+	pship = loadImage('Sprites/Player_Ship_2.png', () => {}, () => {
+		console.log("failed to load player ship");
+	});
+}
+
 function setup() {
+	//20, 20 is initial canvas size, gets replaced by window resized function
 	cnv = createCanvas(20, 20);
 	cnv.parent("sketch-container");
 	windowResized()
 	centerCanvas();
-	x = width / 2;
-	y = height / 2;
-	background(51);
+	isGameOver = false
+	
+	//name entry:
+	background(255);
 	input = createInput();
 	input.position(0, 0);
 
@@ -184,21 +207,14 @@ function setup() {
 	textSize(50);
 	
 	socket = io.connect('http://localhost:3000');
-
-	img = loadImage('Sprites/Player_Ship_2.png', () => {}, () => {
-		console.log('failed to load image');
-	});
-
-	//creates sound objects for each source
-	for (var i = 0; i < sounds.length; i++){
-		sounds[i] = new SoundEntity(sounds[i]);
-	}
 	
-	player = new HealthEntity(random(width), random(height),50,5,5, null);
+	//TODO
+	//mapWidth/5 is just a testing artefact, so players spawn close together. replace with undivided values in final
+	player = new HealthEntity(random(mapWidth / 5), random(mapHeight / 5),50,5,5, null);
 	var data = {
 		x: player.pos.x,
 		y: player.pos.y,
-		name: "SpaceShip"
+		name: "SpaceShip " + floor(random(122))
 	};
 	camera = {
 		x: 0,
@@ -207,6 +223,8 @@ function setup() {
 
 	socket.emit('start', data);
 	socket.on('heartbeat', function (data) {
+		//replace player array with data from server
+		//as well as projectile array
 		players = data['players'];
 		newProjectiles = data['newProjectiles'];
 		
@@ -219,20 +237,50 @@ function setup() {
 			vel = createVector(vel.x, vel.y);
 			newProjectiles[i] = new Entity(pos.x, pos.y, vel.mag());
 			newProjectiles[i].vel = vel;
-			newProjectiles[i].size = 10;
+			newProjectiles[i].size = p.size;
 			newProjectiles[i].teamColor = p.teamColor;
 			newProjectiles[i].attack = p.attack;
+			newProjectiles[i].setTimeout(projectileTimeout);
+			newProjectiles[i].owner = p.owner;
 		}
 
 		//add all new projectiles to the projectiles array
 		for (var i = 0; i < newProjectiles.length; i++) {
 			projectiles.push(newProjectiles[i]);
 		}
-		var ctx = canvas.getContext("2d");
-		var img = document.getElementById("player");
-		//console.log(img);
-		//ctx.drawImage(img, 10, 10, 100, 100);
 
+		//convert list of asteroids into entities
+		asteroids = []
+		var newAsteroids = data['asteroids'];
+		for (var i = 0; i < newAsteroids.length; i++) {
+			asteroid = new HealthEntity(
+				newAsteroids[i].x,
+				newAsteroids[i].y,
+				newAsteroids[i].health,
+				1,
+				0,
+				new Color(255, 255, 255)
+			)
+			asteroid.id = newAsteroids[i].id;
+			asteroid.size = 50
+			asteroid.maxHealth = 10
+		    asteroids.push(asteroid)
+		}
+		
+		//convert list of enemies into entities
+		/*var enemies = data['enemies'];
+		for (var i = 0; i < enemies.length; i++) {
+			enemies.push(
+				new HealthEntity(
+					enemies[i].x,
+					enemies[i].y,
+					enemies[i].health,
+					0,
+					0,
+					new Color(255, 255, 255)
+				)
+			)
+		}*/
 		socket.emit('heartbeatReply', {});
 	})
 
@@ -270,70 +318,77 @@ function setup() {
 			data.teamColor
 		))
 	})
-    /*let frames = spritedata.frames;
-	for (let i = 0; i < frames.length; i++) {
-	    let pos = frames[i].position;
-	    let img = spritesheet.get(pos.x, pos.y, pos.w, pos.h);
-	    animation.push(img);
-	}
-	sprite = new Sprite(animation, 50, 50, 1);
-	*/
 }
 
+//change name to input value
 function changeName() {
 	const name = input.value();
 	input.value('');
-	for (var i = 0; i < players.length; i++) {
-		if (socket.id != undefined) {
-			if (socket.id === players[i].id) {
-				data = {
-					newName: name,
-					i: i
-				}
-				console.log(data)
-				socket.emit('changeName', data);
-			}
-		}
+	data = name
+	player.name = name;
+	socket.emit('changeName', data);
+}
+
+function colorsEqual(c1, c2) {
+	return c1.r === c2.r && c1.g === c2.g && c1.b === c2.b;
+}
+
+function takeDamage(amount, attackingTeam) {
+	player.health -= amount;
+	var data = {
+		newTeam: attackingTeam,
+		health: player.health
 	}
+	if (player.health <= 0) {
+		//if attacking team is all white
+		if (colorsEqual(attackingTeam, {
+				r: 255,
+				g: 255,
+				b: 255
+			})) {
+			player.teamColor = null
+		} else {
+			player.teamColor = attackingTeam;
+			console.log(player)
+		}
+		player.health = player.maxHealth
+	}
+	socket.emit('changeHealth', data);
+}
+
+function gameOver() {
 
 }
 
-function rotate_and_draw_image(img_x, img_y, img_width, img_height, img_angle){
-	imageMode(CENTER);
-	translate(img_x+img_width/2, img_y+img_width/2);
-	rotate(PI/180*img_angle);
-	image(img, 0, 0, img_width, img_height);
-	rotate(-PI / 180 * img_angle);
-	translate(-(img_x+img_width/2), -(img_y+img_width/2));
-	imageMode(CORNER);
-  }
-
 function draw() {
+	if (isGameOver) {
+		gameOver()
+		return;
+	}
 
+	//initially, we don't know our own team color.  Wait for the server to tell us
 	if (player.teamColor === null) {
 		for (var i = 0; i < players.length; i++) {
 			if (socket.id === players[i].id) {
 				player.teamColor = players[i].teamColor;
+				camera.x = max(width / 2 - players[i].x, 0);
+				camera.y = max(height / 2 - players[i].y, 0);
 			}
 		}
 		console.log("Found me! " + player.teamColor);
 	}
-
-	background(51)
-	//console.log("camera: " + camera.x + " " +  camera.y);
-
 	
 	//the closest distance a player can get to edge of the screen without the camera attempting to move
-	var playerEdgeSoftLimitWidth = windowWidth / 10;
-	var playerEdgeSoftLimitHeight = windowHeight / 10;
+	var playerEdgeSoftLimitWidth = width / 10;
+	var playerEdgeSoftLimitHeight = height / 10;
 	var oldcamera = {
 		x: camera.x,
 		y: camera.y
 	}
 
 	//case when player is at the bottom or right of the screen
-	var edgeX = camera.x + windowWidth
-	var edgeY = camera.y + windowHeight
+	var edgeX = camera.x + width
+	var edgeY = camera.y + height
 
 	var distFromEdgeX = edgeX - player.pos.x
 	var distFromEdgeY = edgeY - player.pos.y
@@ -341,17 +396,14 @@ function draw() {
 	var cameraMoveX = max(playerEdgeSoftLimitWidth - distFromEdgeX, 0);
 	var cameraMoveY = max(playerEdgeSoftLimitHeight - distFromEdgeY, 0);
 	
-	var cameraLimitX = mapWidth - windowWidth;
-	var cameraLimitY = mapHeight - windowHeight;
+	var cameraLimitX = mapWidth - width;
+	var cameraLimitY = mapHeight - height;
 	
 	var newCameraX = min(camera.x + cameraMoveX, cameraLimitX);
 	var newCameraY = min(camera.y + cameraMoveY, cameraLimitY);
 
 	camera.x = newCameraX;
 	camera.y = newCameraY;
-	/*if (camera.x != oldcamera.x || camera.y != oldcamera.y) {
-		console.log("camera: " + camera.x + " " +  camera.y);
-	}*/
 
 	//case when player is at the top or left of the screen
 	var edgeX = camera.x
@@ -375,6 +427,11 @@ function draw() {
 	function code(c) {
 		return c.charCodeAt()
 	}
+
+	//background image
+	background(51);
+	image(bg,-camera.x,-camera.y,3000,2000);
+
 
 	//controls basic player movement
 	var accMagnitude = player.maxSpeed / 5;
@@ -400,23 +457,20 @@ function draw() {
 		//console.log("RIGHT_ARROW PRESSED");
 	}
 
-	//const firerate for # shots per seconds
-	//countdown
-	//boolean shot that deteriorates timer
-
+	//delete projectiles that are too close to the edge of the screen
 	for (var i = 0; i < projectiles.length; i++) {
 		projectiles[i].smoothMove();
-		
-		if (projectiles[i].pos.x > mapWidth || projectiles[i].pos.x < 0 || projectiles[i].pos.y > mapHeight || projectiles[i].pos.y < 0) {
+
+		if (Math.abs(projectiles[i].pos.x) < 0.01 || Math.abs(projectiles[i].pos.y) < 0.01 || Math.abs(projectiles[i].pos.x - mapWidth) < 0.01 || Math.abs(projectiles[i].pos.y - mapHeight) < 0.01) {
 			projectiles.splice(i, 1);
 			i--;
 		}
     }
 
-//
-
+	//the angle determined by mouse position
 	var newAngle = Math.atan2(mouseY - (player.pos.y - camera.y), mouseX - (player.pos.x - camera.x));
 	
+	//value needs to be wrangled because of differing coordinate systems
 	newAngle *= (180 / Math.PI);
 	newAngle = -newAngle;
 	if (newAngle < 0) {
@@ -425,31 +479,47 @@ function draw() {
 	if (!isNaN(newAngle)) {
 		player.angle = newAngle;
 	}
-	//console.log("new angle: ",  newAngle)
-
-	function colorsEqual(c1, c2) {
-		return c1.r === c2.r && c1.g === c2.g && c1.b === c2.b;
-	}
 
 	//collision for us
 	for (var j = 0; j < projectiles.length; j++) {
+		if (projectiles[j].isExpired()) {
+			projectiles.splice(j, 1);
+			j--;
+			continue;
+		}
 		if(colorsEqual(projectiles[j].teamColor, player.teamColor)) {
 			continue;
 		}else if( player.isCollided(projectiles[j]) && player.health > 0) {
-			console.log(player.teamColor);
-			console.log(projectiles[j].teamColor);
-			player.health -= projectiles[j].attack;
-
-			var data = {
-				newTeam: projectiles[j].teamColor,
-				health: player.health
-			}
-			if (player.health <= 0) {
-				player.teamColor = projectiles[j].teamColor;
-			}
+			takeDamage(projectiles[j].attack, projectiles[j].teamColor)
 			projectiles.splice(j, 1);
 			j--;
-			socket.emit('changeHealth', data);
+		}
+	}
+
+	//collision for asteroids against us
+	for (var i = 0; i < asteroids.length; i++)
+	{
+		if(player.isCollided(asteroids[i]) && player.health > 0) {
+			takeDamage(asteroids[i].attack, new Color(255, 255, 255))
+		}
+	}
+
+	//collision for asteroids against projectiles
+	for (var i = 0; i < asteroids.length; i++) {
+		for (var j = 0; j < projectiles.length; j++) {
+			if(asteroids[i].isCollided(projectiles[j])) {
+				if (projectiles[j].id === player.id) {
+					//this is our projectile
+					console.log(asteroids)
+					socket.emit('damageAsteroid', {
+						id: asteroids[i].id,
+						damage: projectiles[j].attack
+					})
+				}
+			
+				projectiles.splice(j, 1);
+				j--;
+			}
 		}
 	}
 
@@ -480,6 +550,7 @@ function draw() {
 		var effect = activeEffects[i];
 		if (effect.isExpired()) {
 			effect.unApply(player)
+			socket.emit('expirePowerup', effect.type)
 			activeEffects.splice(i, 1);
 			i--;
 		}
@@ -490,6 +561,7 @@ function draw() {
 		//console.log(powerups[i].pos.x, powerups[i].pos.y, player.pos.x, player.pos.y);
 		if (player.isCollided(powerups[i])) {
 			//console.log("collided with powerup");
+			powerupSound.play();
 			socket.emit('collectPowerup', powerups[i].id);
 			powerups[i].apply(player);
 			if (powerups[i].hasActiveEffect()) {
@@ -498,7 +570,8 @@ function draw() {
 			}
 			powerups.splice(i, 1);
 			i--;
-			sounds[1].sound.play();
+			//POWERUP_SOUND.play();
+			//POWERUP_SOUND.loop = false;
 		}
 	}
 
@@ -516,64 +589,66 @@ function draw() {
 		var distance = Math.sqrt(Math.pow(swords[i].pos.x - player.pos.x, 2) + Math.pow(swords[i].pos.y - player.pos.y, 2));
 		var isCollided = distance < collisionDist;
 		if(isCollided) {
-			console.log("collided with sword");
-			player.health -= swords[i].attack;
+			takeDamage(swords[i].attack, swords[i].teamColor);
 			swords[i].used = true;
-			socket.emit('changeHealth',{
-				newTeam: swords[i].teamColor,
-				health: player.health
-			});
-			if (player.health <= 0) {
-				player.teamColor = swords[i].teamColor;
+		}
+	}
+
+	const linkDistance = 200
+	player.attackSize = 10
+	var links = 0;
+	//draw player connections
+	for (var i = 0; i < players.length; i++) {
+		for (var j = i; j < players.length; j++) {
+			if (i == j) {
+				continue;
+			}
+			if (!colorsEqual(players[i].teamColor, players[j].teamColor)) {
+				continue;
+			}
+
+			var distance = Math.sqrt(Math.pow(players[i].x - players[j].x, 2) + Math.pow(players[i].y - players[j].y, 2));
+			console.log(distance);
+			if (distance < linkDistance) {
+				if (players[i].id === socket.id || players[j].id === socket.id) {
+					links++
+				}
+				push()
+				stroke(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
+				strokeWeight(4);
+				line(players[i].x - camera.x, players[i].y - camera.y, players[j].x - camera.x, players[j].y - camera.y);
+				pop()
 			}
 		}
 	}
+	player.attackSize *= (links * 1.6 + 1);
     
-	player.vel.x = player.vel.x * 0.8;
-	player.vel.y = player.vel.y * 0.8;
+	player.vel.x = player.vel.x * 0.99;
+	player.vel.y = player.vel.y * 0.99;
 	player.smoothMove();
+	//render players
 	for (var i = players.length - 1; i >= 0; i--) {
-		push()
-		fill(255, 255, 255)
-		circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
 		push();
-		fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
 		angleMode(DEGREES)
 		translate(players[i].x - camera.x, players[i].y - camera.y);
 		rotate(-players[i].angle + 90);
-		beginShape();
-		vertex(0, -players[i].size * 2);
-		vertex(-players[i].size, players[i].size * 2);
-		vertex(0, -players[i].size + players[i].size * 2);
-		vertex(players[i].size, players[i].size * 2);
-		endShape(CLOSE);
-		pop();
-
-		image(img, 0, 0)
-		fill(255, 255, 255)
-		circle(players[i].x - camera.x, players[i].y - camera.y, players[i].size * 2);
-		push();
 		tint(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
-		angleMode(DEGREES)
-		translate(players[i].x - camera.x, players[i].y - camera.y);
-		rotate(-players[i].angle + 90);
-		rotate_and_draw_image(players[i].x, players[i].y, players[i].size * 3, players[i].size * 3, players[i].angle);
-		tint(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
-		image(img, 0, 0, players[i].size, players[i].size);
+		imageMode(CENTER);
+		image(pship, 0, 0, players[i].size * 3.5, players[i].size * 3.5);
 		pop();
-
-		//draw rectangle with players[i].x, and players[i].y + 3
 		
 		//max health bar (black)
+		fill(0, 0, 0);
 		rect(players[i].x- camera.x -20, players[i].y  - camera.y + 25, player.maxHealth, 10);
-		fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
-		//current health bar (red)
 		
+		//current health bar (same as player color)
+		fill(players[i].teamColor.r, players[i].teamColor.g, players[i].teamColor.b);
 		rect(players[i].x - camera.x -20, players[i].y - camera.y + 25, players[i].health, 10);
 		
+		//display player name
 		fill(255);
 		textAlign(CENTER);
-		textSize((players[i].name.length + 15) / 3);
+		textSize(200 / (players[i].name.length + 15));
 		text(players[i].name, players[i].x - camera.x, players[i].y - camera.y + (players[i].size + 20));
 	}
 	//render projectiles
@@ -586,13 +661,46 @@ function draw() {
 	//render powerups
 	for (var i = powerups.length - 1; i >= 0; i--) {
 		var p = powerups[i];
-		fill(p.teamColor.r, p.teamColor.g, p.teamColor.b);
-		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+
+		//red triangle for health
+		if(powerups[i].type === Powerup.HEALTH){
+			fill(255, 0, 0);
+			triangle(p.pos.x - camera.x, p.pos.y - camera.y, p.pos.x - camera.x + p.size, p.pos.y - camera.y, p.pos.x - camera.x + p.size/2, p.pos.y - camera.y + p.size);
+		} else if(powerups[i].id === Powerup.SPEED){
+			fill(255, 255, 255);
+			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+			fill(0, 255, 0);
+			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+
+		}else if(powerups[i].id === Powerup.ATTACK){
+			fill(0,20,200);
+			ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+
+			//text on triangle to say "Zoom"
+			fill(0,0,0);
+			textAlign(CENTER);
+			text("Zoom", p.pos.x - camera.x, p.pos.y - camera.y + (p.size + 20));
+		}
 	}
 
-	
+	//render asteroids
+	for (var i = asteroids.length - 1; i >= 0; i--) {
+		var p = asteroids[i];
+		fill(107, 88, 83);
+		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size * 2, p.size * 2);
+	}	
+
+	//render enemies
+	/*for (var i = enemies.length - 1; i >=0; i --) {
+		var p = enemies[i];
+		fill(107, 88, 83);
+		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+
+	}*/
 
 	//render swords
+	//currently in a broken state
 	for (var i = 0; i < swords.length; i++) {
 		var sword = swords[i];
 		if (sword.isExpired()) {
@@ -603,7 +711,7 @@ function draw() {
 			fill(sword.teamColor.r, sword.teamColor.g, sword.teamColor.b);
 			translate(sword.pos.x - camera.x, sword.pos.y - camera.y)
 			rotate(-sword.angle);
-			rect(0, 0, sword.size, sword.size);
+			arc(0, 0, 280, 280, 0, PI + QUARTER_PI, PIE);
 			pop()
 		}
 	}
@@ -620,19 +728,22 @@ function draw() {
 }
 
 var swords = []
-//in milliseconds
+//in milliseconds:
 const swordCooldown = 1000;
 var lastSwordTime = -10000;
 
+//true if the sword cooldown is over
 function isSwordReady() {
 	console.log(millis() - lastSwordTime, swordCooldown)
 	return (millis() - lastSwordTime) > swordCooldown;
 }
 
+//do meele atttack, checks cooldown
 function meeleAttack() {
 	if (!isSwordReady()) {
 		return;
 	}
+	laserSwordSound.play();
 	lastSwordTime = millis();
 	socket.emit('meeleAttack', {})
 }
@@ -655,8 +766,8 @@ function keyReleased() {
 
 function keyTyped(){
 	if (keyCode === 32) {
-		socket.emit('shoot', {})
-		sounds[0].sound.play();
+		socket.emit('shoot', player.attackSize)
+		blasterSound.play();
 	}
 	if (keyCode === 107 || keyCode === 75) {
 		meeleAttack()
@@ -664,6 +775,6 @@ function keyTyped(){
 }
 
 function mouseClicked(){
-	socket.emit('shoot', {})
-	sounds[0].sound.play();
+	socket.emit('shoot', player.attackSize)
+	blasterSound.play();
 }

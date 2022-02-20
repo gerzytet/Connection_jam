@@ -6,25 +6,21 @@
     <script src="/socket.io/socket.io.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.min.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/addons/p5.sound.min.js"></script>
-    <script type="text/javascript" src="sketch.js"></script>
-    <script type="text/javascript" src="entity.js"></script>
-    <script type="text/javascript" src="sprite.js"></script>
-    <script type="text/javascript" src="sound.js"></script>
-    <audio controls class="no-bar">
-        <source src="blaster.mp3" type="audio/mpeg">
-        <source src="powerup.mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
-    </audio>
+    <!--script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.core.min.js" integrity="sha512-+wqa4/aOL4vwhL637A4p+6epqhUHDqpEfYJa1+PlzlMf908CSOb3xtIeKwZWh5Q0Q/R2nYUKxH4vvcQg+k8KKQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    Howler Stuff
+    File Path - C:\Users\Chris\OneDrive\Documents\Game Jam 1\Connection_jam\node_modules\howler\dist
+    -->
 
     <style>
         body {
             padding: 20px;
         }
-        .no-bar{
+
+        .no-bar {
             display: none;
         }
     </style>
-    
+
     <div id="sketch-container">
 
     </div>
@@ -32,6 +28,24 @@
 </head>
 <body>
 
-    <img id="player" src="Sprites/Player_Ship_2.png" style="display:none;"> </img>
+    <img id="player" src="public/Sprites/Player_Ship_2.png" style="display:none;"> </img>
+    <img id="background" src="Sprite_Background.png" style="display:none"></img>
+
+    <audio controls class="no-bar">
+        <source src="library/blaster.mp3" type="audio/mpeg">
+        <source src="library/boost.mp3" type="audio/mpeg">
+        <source src="library/laser_sword.mp3" type="audio/mpeg">
+        <source src="library/powerup.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.0.4/howler.js"></script>
+    <script type="text/javascript" src="sketch.js"></script>
+    <script type="text/javascript" src="entity.js"></script>
+    <script type="text/javascript" src="sprite.js"></script>
+    <script type="text/javascript" src="sound.js"></script>
+
+
+
 </body>
 </html>
