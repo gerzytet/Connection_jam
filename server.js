@@ -39,13 +39,11 @@ const swordSizeMultiplier = 4
 const tickTime = 3
 const timeoutMillis = 10000
 
-
-//just to hold powerup types
-class Powerup {
-    static HEAL = 0;
-    static SPEED = 1;
-    static ATTACK = 2;
-    static FUEL = 3;
+var Powerup = {
+    HEAL: 0,
+    SPEED: 1,
+    ATTACK: 2,
+    FUEL: 3
 }
 
 //apply powerup effects to server-side players

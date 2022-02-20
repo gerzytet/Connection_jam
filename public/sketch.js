@@ -5,7 +5,7 @@
 @brief File that controls the graphics on the canvas
 */
 
-var sounds = ['library/blaster.mp3', 'library/boost.mp3', 'library/laser_sword.mp3', 'library/powerup.mp3'];
+var sounds = ['library/blaster.mp3', 'library/boost.mp3', 'library/laser_sword.mp3', 'library/powerup.mp3', 'library/exploion.mp3'];
 
 var blasterSound = new Howl({
 	src:[sounds[0]],
@@ -23,6 +23,11 @@ var laserSwordSound = new Howl({
 var powerupSound = new Howl({
 	src:[sounds[3]],
 	loop: false
+});
+var explosionSound = new Howl({
+	src:[sounds[4]],
+	loop: false,
+	volume: 0.2
 });
 
 //howler crap
@@ -238,7 +243,7 @@ function setup() {
 	textAlign(CENTER);
 	textSize(50);
 	
-	socket = io.connect("localhost:3000");
+	socket = io.connect("165.232.140.124:3000");
 	
 	//TODO
 	//mapWidth/5 is just a testing artefact, so players spawn close together. replace with undivided values in final
