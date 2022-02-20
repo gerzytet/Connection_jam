@@ -5,7 +5,7 @@
 @brief File that controls the graphics on the canvas
 */
 
-var sounds = ['library/blaster.mp3', 'library/boost.mp3', 'library/laser_sword.mp3', 'library/powerup.mp3', 'library/exploion.mp3'];
+var sounds = ['library/blaster.mp3', 'library/boost.mp3', 'library/laser_sword.mp3', 'library/powerup.mp3', 'library/explosion.mp3'];
 
 var blasterSound = new Howl({
 	src:[sounds[0]],
@@ -566,6 +566,7 @@ function draw() {
 		player.angle = newAngle;
 	}
 
+	//checks if there are collisions
 	function isXYXYCollision(xy1, xy2) {
 		var collisionDist = xy1.size + xy2.size;
 		var dist = Math.sqrt(Math.pow(xy1.x - xy2.x, 2) + Math.pow(xy1.y - xy2.y, 2));
@@ -585,6 +586,7 @@ function draw() {
 		for (var i = 0; i < asteroids.length; i++) {
 			if(isPosPosCollision(player, asteroids[i])) {
 				takeDamage(asteroids[i].attack, new Color(255, 255, 255))
+				explosionSound.play();
 				if (player.teamColor === null) {
 					return
 				}
@@ -602,7 +604,8 @@ function draw() {
 			if(colorsEqual(projectiles[i].teamColor, player.teamColor)) {
 				continue;
 			} else if (isPosPosCollision(player, projectiles[i])) {
-				takeDamage(projectiles[i].attack, projectiles[i].teamColor)
+				takeDamage(projectiles[i].attack, projectiles[i].teamColor);
+				explosionSound.play();
 				if (player.teamColor === null) {
 					return
 				}
@@ -639,6 +642,7 @@ function draw() {
 			}
 			if(isPosPosCollision(player, swords[i])) {
 				takeDamage(swords[i].attack, swords[i].teamColor);
+				explosionSound.play();
 				if (player.teamColor === null)
 					return
 				swords[i].used = true;
@@ -678,6 +682,7 @@ function draw() {
 			}
 			if(isPosPosCollision(projectiles[j], enemies[i])) {
 				damageEnemy(enemies[i], projectiles[j].attack);
+				explosionSound.play();
 				projectiles.splice(j, 1);
 				j--;
 				skip = true;
@@ -718,6 +723,7 @@ function draw() {
 				if(isPosPosCollision(mySword, enemies[i])) {
 					mySword.used = true;
 					damageEnemy(enemies[i], mySword.attack);
+					explosionSound.play();
 				}
 			}
 
