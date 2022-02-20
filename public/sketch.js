@@ -28,14 +28,13 @@ var powerupSound = new Howl({
 var explosionSound = new Howl({
 	src:[sounds[4]],
 	loop: false,
-	volume: 0.2
+	volume: 0.02
 });
-/*var swordHitSound = new Howl({
+var swordHitSound = new Howl({
 	src:[sounds[5]],
 	loop: false,
 	volume: 0.5
 });
-*/
 
 //howler crap
 //const {Howl, Howler} = require('howler');
@@ -191,6 +190,10 @@ var asteroid_full;
 var asteroid_medium;
 var asteroid_low;
 var bullet;
+var pupAttack;
+var pupFuel;
+var pupHealth;
+var pupSpeed;
 //var PlayerShipImage = new Image();
 
 var isGameOver
@@ -228,6 +231,32 @@ function preload() {
 	bullet = loadImage('Bullet.png', () => {}, () => {
 		console.log("failed to load bullet");
 	});
+
+	powerupFuel = loadImage('PowerUp_Fuel_2.png', () => {}, () => {
+		console.log("failed to load powerup fuel");
+	})
+	powerupHealth = loadImage('PowerUp-Health.png', () => {}, () => {
+		console.log("failed to load powerup health");
+	})
+	powerupSpeed = loadImage('PowerUp-Speed.png', () => {}, () => {
+		console.log("failed to load powerup speed");
+	})
+	powerupAttack = loadImage('PowerUp-Attack.png', () => {}, () => {
+		console.log("failed to load powerup attack");
+	})
+}
+
+function powerupImageFromType(type) {
+	switch (type) {
+		case Powerup.HEAL:
+			return powerupHealth;
+		case Powerup.SPEED:
+			return powerupSpeed;
+		case Powerup.ATTACK:
+			return powerupAttack;
+		case Powerup.FUEL:
+			return powerupFuel;
+	}
 }
 
 function setup() {
@@ -307,7 +336,7 @@ function setup() {
 			)
 			asteroid.id = newAsteroids[i].id;
 			asteroid.size = newAsteroids[i].size;
-			asteroid.maxHealth = 10
+			asteroid.maxHealth = newAsteroids[i].maxHealth;
 		    asteroids.push(asteroid)
 		}
 		
@@ -370,10 +399,9 @@ function setup() {
 		}
 	})
 
-	socket.on('gameWon', function (gameWon) {
-		if (gameWon) {
-			isGameOver = true;
-        }
+	socket.on('gameWon', function (winner) {
+		isGameOver = true;
+		player.teamColor = winner;
     })
 
 	socket.on('enemyShoot', function (data) {
@@ -414,6 +442,7 @@ function takeDamage(amount, attackingTeam) {
 	}
 	if (player.health <= 0) {
 		//if attacking team is all white
+		explosionSound.play();
 		if (colorsEqual(attackingTeam, {
 				r: 255,
 				g: 255,
@@ -647,7 +676,7 @@ function draw() {
 			}
 			if(isPosPosCollision(player, swords[i])) {
 				takeDamage(swords[i].attack, swords[i].teamColor);
-				//swordHitSound.play();
+				swordHitSound.play();
 				if (player.teamColor === null)
 					return
 				swords[i].used = true;
@@ -709,6 +738,10 @@ function draw() {
 						bvelx: projectiles[j].vel.x,
 						bvely: projectiles[j].vel.y
 					})
+
+					if (projectiles[j].attack >= asteroids[i].health) {
+						explosionSound.play();
+					}
 				
 					projectiles.splice(j, 1);
 					j--;
@@ -742,112 +775,6 @@ function draw() {
 			}
 		}
 	}
-
-	/*
-	//collision for us
-	for (var j = 0; j < projectiles.length; j++) {
-		if (projectiles[j].isExpired()) {
-			projectiles.splice(j, 1);
-			j--;
-			continue;
-		}
-		if(colorsEqual(projectiles[j].teamColor, player.teamColor)) {
-			continue;
-		}else if( player.isCollided(projectiles[j]) && player.health > 0) {
-			takeDamage(projectiles[j].attack, projectiles[j].teamColor)
-			player.vel.x = player.vel.x + (projectiles[j].vel.x * 0.5);
-			player.vel.y = player.vel.y + (projectiles[j].vel.y * 0.5);
-			projectiles.splice(j, 1);
-			j--;
-		}
-	}
-
-	//collision for asteroids against us
-	for (var i = 0; i < asteroids.length; i++)
-	{
-		if(player.isCollided(asteroids[i]) && player.health > 0) {
-			takeDamage(asteroids[i].attack, new Color(255, 255, 255))
-		}
-	}
-
-	//collision for asteroids against projectiles
-	for (var i = 0; i < asteroids.length; i++) {
-		for (var j = 0; j < projectiles.length; j++) {
-			if(asteroids[i].isCollided(projectiles[j])) {
-				if (projectiles[j].id === player.id) {
-					//this is our projectile
-					socket.emit('damageAsteroid', {
-						id: asteroids[i].id,
-						damage: projectiles[j].attack
-					})
-				}
-			
-				projectiles.splice(j, 1);
-				j--;
-			}
-		}
-	}
-
-	//collision for others
-	for (var i = 0; i < players.length; i++) {
-		//if players[i] is us, skip
-		if (players[i].id === socket.id || players[i].health <= 0) {
-			continue;
-		}
-		//we just delete balls when we detect collision
-		for (var j = 0; j < projectiles.length; j++) {
-			if(colorsEqual(projectiles[j].teamColor, players[i].teamColor)) {
-				continue;
-			}
-			//log size and pos of both
-			var collisionDist = projectiles[j].size + players[i].size;
-			var distance = Math.sqrt(Math.pow(projectiles[j].pos.x - players[i].x, 2) + Math.pow(projectiles[j].pos.y - players[i].y, 2));
-			var isCollided = distance < collisionDist;
-			if(isCollided) {
-				projectiles.splice(j, 1);
-				j--;
-			}
-		}
-	}
-	
-	//collision for powerups
-	for (var i = 0; i < powerups.length; i++) {
-		//console.log(powerups[i].pos.x, powerups[i].pos.y, player.pos.x, player.pos.y);
-		if (player.isCollided(powerups[i])) {
-			//console.log("collided with powerup");
-			powerupSound.play();
-			socket.emit('collectPowerup', powerups[i].id);
-			powerups[i].apply(player);
-			if (powerups[i].hasActiveEffect()) {
-				var effect = powerups[i].getActiveEffect();
-				activeEffects.push(effect);
-			}
-			powerups.splice(i, 1);
-			i--;
-			//POWERUP_SOUND.play();
-			//POWERUP_SOUND.loop = false;
-		}
-	}
-
-	//collision for swords
-	for (var i = 0; i < swords.length; i++) {
-		if (swords[i].isExpired()) {
-			swords.splice(i, 1);
-			i--;
-			continue;
-		}
-		if (colorsEqual(player.teamColor, swords[i].teamColor) || swords[i].used) {
-			continue;
-		}
-		var collisionDist = swords[i].size + players[i].size;
-		var distance = Math.sqrt(Math.pow(swords[i].pos.x - player.pos.x, 2) + Math.pow(swords[i].pos.y - player.pos.y, 2));
-		var isCollided = distance < collisionDist;
-		if(isCollided) {
-			takeDamage(swords[i].attack, swords[i].teamColor);
-			swords[i].used = true;
-		}
-	}*/
-
 	//check for active effect expiration
 	for (var i = 0; i < activeEffects.length; i++) {
 		var effect = activeEffects[i];
@@ -936,70 +863,53 @@ function draw() {
         }
 	}
 
-	/*
-	function shouldRenderXY () {
+	function shouldRenderXY (x, y) {
 
 	}
 	function shouldRender(entity) {
 		return shouldRender(entity.pos.x, entity.pos.y);
-	}*/
+	}
 	
-
 	//render projectiles
-	/*
 	for (var i = projectiles.length - 1; i >= 0; i--) {
 		var p = projectiles[i];
-		tint(p.teamColor.r, p.teamColor.g, p.teamColor.b);
-		//ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
-		image(bullet, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		push()
+		fill(p.teamColor.r, p.teamColor.g, p.teamColor.b);
+		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+		pop()
+		//image(bullet, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
 		
-	}*/
+	}
 
 	//render powerups
 	for (var i = powerups.length - 1; i >= 0; i--) {
 		var p = powerups[i];
 
-		fill(255, 255, 255)
-		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size * 5, p.size * 5);
-
-		//red triangle for health
-		if(powerups[i].type === Powerup.HEALTH){
-			fill(255, 0, 0);
-			triangle(p.pos.x - camera.x, p.pos.y - camera.y, p.pos.x - camera.x + p.size, p.pos.y - camera.y, p.pos.x - camera.x + p.size/2, p.pos.y - camera.y + p.size);
-		} else if(powerups[i].type === Powerup.SPEED){
-			fill(255, 255, 255);
-			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
-			fill(0, 255, 0);
-			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
-			rect(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
-
-		}else if(powerups[i].type === Powerup.ATTACK){
-			fill(0,20,200);
-			ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
-
-			//text on triangle to say "Zoom"
-			fill(0,0,0);
-			textAlign(CENTER);
-			text("Zoom", p.pos.x - camera.x, p.pos.y - camera.y + (p.size + 20));
-		} else if (powerups[i].type === Powerup.FUEL) {
-			fill(90, 252, 193)
-			ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
-		}
+		push()
+		var pImg = powerupImageFromType(p.type)
+		imageMode(CENTER)
+		image(pImg, p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
+		pop()
 	}
 
 	//render asteroids
 	for (var i = asteroids.length - 1; i >= 0; i--) {
 		var p = asteroids[i];
+		push()
 		fill(107, 88, 83);
-		if(asteroids[i].health > 7){
-			image(asteroid_full, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		translate(p.pos.x - camera.x, p.pos.y - camera.y)
+		imageMode(CENTER)
+		var percentHealth = p.health / p.maxHealth;
+		if(percentHealth > 0.66){
+			image(asteroid_full, 0, 0, p.size * 3, p.size * 3);
 		}
-		else if(asteroids[i].health <= 7 && asteroids[i].health > 3){
-			image(asteroid_medium, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		else if(percentHealth > 0.33){
+			image(asteroid_medium, 0, 0, p.size * 3, p.size * 3);
 		}
-		else if(asteroids[i].health <= 3 && asteroids[i].health > 0){
-			image(asteroid_low, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
+		else {
+			image(asteroid_low, 0, 0, p.size * 3, p.size * 3);
 		}
+		pop()
 		//ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size * 2, p.size * 2);
 	}	
 
@@ -1011,14 +921,22 @@ function draw() {
 		angleMode(DEGREES)
 		translate(enemies[i].pos.x - camera.x, enemies[i].pos.y - camera.y);
 		rotate(-enemies[i].angle + 90);
+		imageMode(CENTER)
+		image(eship, 0, 0, enemies[i].size * 2, enemies[i].size * 2);
+		pop();
 		/*beginShape();
 		vertex(0, -enemies[i].size * 2);
 		vertex(-enemies[i].size, enemies[i].size * 2);
 		vertex(0, -enemies[i].size + enemies[i].size * 2);
 		vertex(enemies[i].size, enemies[i].size * 2);
 		endShape(CLOSE);*/
-		image(eship, 0, 0, enemies[i].size * 3.5, enemies[i].size * 3.5);
-		pop();
+		//current fuel bar (blue)
+		fill(40);
+		rect(enemies[i].x- camera.x -23, enemies[i].y  - camera.y + 30, enemies[i].maxHealth, 10);
+		
+		//current health bar (same as player color)
+		fill(enemies[i].teamColor.r,enemies[i].teamColor.g,enemies[i].teamColor.b);
+		rect(enemies[i].x - camera.x - 23, enemies[i].y - camera.y + 30, enemies[i].health, 10);
 	}
 
 	//render swords
@@ -1089,11 +1007,6 @@ function keyReleased() {
 
 function keyTyped(){
 	if (keyCode === 32) {
-		socket.emit('shoot', player.attackSize)
-		blasterSound.play();
-	}
-	//k for meele
-	if (keyCode === 107 || keyCode === 75) {
 		meeleAttack()
 	}
 	//e for dash

@@ -127,6 +127,8 @@ if the powerup has an effect that needs to expire
 	modify expirePowerup in server.js
 }
 */
+
+const powerupSize = 20
 class Powerup extends Entity {
 	//x and y are the same as parent
 	//Number type is the type of powerup
@@ -153,7 +155,7 @@ class Powerup extends Entity {
 	}
 
 	constructor(x, y, type, id) {
-		super(x, y, 0, 0, 5, Powerup.colorFromType(type));
+		super(x, y, 0, 0, powerupSize, Powerup.colorFromType(type));
 		this.type = type;
 		this.id = id;
 	}

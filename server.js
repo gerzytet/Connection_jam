@@ -25,7 +25,7 @@ const enemyBulletSpeed = 2.5;
 const enemyChancePerTick = 0.01
 const enemyLimit = 5
 const enemyShootChancePerTick = 0.005
-const enemySize = 20
+const enemySize = 100
 const mapHeight = 2000
 const mapWidth = 3000
 const playerAttack = 5
@@ -112,6 +112,7 @@ class Asteroid {
         this.vy = vy;
         this.size = asteroidBaseSize + Math.random() * asteroidVariance;
         this.health = this.size;
+        this.maxHealth = this.size
     };
 }
 
@@ -651,7 +652,7 @@ function GameWon(players) {
             gameWon = false;
         } else if (samecolor === true && (players.length > 1)) {
             gameWon = true;
-            io.sockets.emit('gameWon', gameWon);
+            io.sockets.emit('gameWon', players[0].teamColor);
         }
     } else {
         gameWon = false;
