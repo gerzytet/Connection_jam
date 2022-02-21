@@ -1,6 +1,6 @@
 /*
 @file sketch.js
-@author entire team
+@author Christian R, Patrick M, Craig W, David J, David K
 @date 2/18/2022
 @brief File that controls the graphics on the canvas
 */
@@ -28,7 +28,7 @@ var powerupSound = new Howl({
 var explosionSound = new Howl({
 	src:[sounds[4]],
 	loop: false,
-	volume: 0.02
+	volume: 0.1
 });
 var swordHitSound = new Howl({
 	src:[sounds[5]],
@@ -41,8 +41,6 @@ var swordHitSound = new Howl({
 
 var socket
 var players = []
-
-const projectileTimeout = 5000;
 var projectiles = []
 var player
 var powerups = []
@@ -176,8 +174,8 @@ data: {
 */
 
 //if you change these, also change them in server.js
-const mapWidth = 3000;
-const mapHeight = 2000;
+const mapWidth = 6000;
+const mapHeight = 4000;
 
 var cnv;
 var camera;
@@ -194,6 +192,8 @@ var pupAttack;
 var pupFuel;
 var pupHealth;
 var pupSpeed;
+var swordImg;
+var powerupMachineGun
 //var PlayerShipImage = new Image();
 
 var isGameOver
@@ -205,7 +205,7 @@ function centerCanvas() {
 }
 
 function windowResized() {
-	cnv = resizeCanvas(windowWidth - 20, windowHeight - 20);
+	cnv = resizeCanvas(windowWidth - 40, windowHeight - 80);
 	centerCanvas();
 }
 
@@ -244,6 +244,15 @@ function preload() {
 	powerupAttack = loadImage('PowerUp-Attack.png', () => {}, () => {
 		console.log("failed to load powerup attack");
 	})
+	powerupMachineGun = loadImage('Gun.png', () => {}, () => {
+		console.log("failed to load powerup machine gun");
+	})
+
+	swordImg = loadImage('Sword.png', () => {}, () => {
+		console.log("failed to load sword");
+	});
+
+
 }
 
 function powerupImageFromType(type) {
@@ -256,6 +265,8 @@ function powerupImageFromType(type) {
 			return powerupAttack;
 		case Powerup.FUEL:
 			return powerupFuel;
+		case Powerup.MACHINE_GUN:
+			return powerupMachineGun
 	}
 }
 
@@ -418,8 +429,7 @@ function setup() {
 		newProjectile.owner = data.id;
 		newProjectile.setTimeout(data.timeout);
 		projectiles.push(newProjectile);
-	})
-}
+	})}
 
 //change name to input value
 function changeName() {
@@ -476,7 +486,15 @@ function gameOver() {
 	textAlign(CENTER);
 	textSize(70);
 	text("You are all Connected now!", windowWidth / 2, windowHeight / 5);
+
+	textSize(35);
+	text("refresh to restart", windowWidth / 2, windowHeight / 5);
+	setTimeout(resetGame, 5000)
 	pop()
+}
+
+function resetGame(){
+	window.location.reload(true);
 }
 
 function draw() {
@@ -622,6 +640,15 @@ function draw() {
 		for (var i = 0; i < asteroids.length; i++) {
 			if(isPosPosCollision(player, asteroids[i])) {
 				takeDamage(asteroids[i].attack, new Color(255, 255, 255))
+
+				var dx = player.pos.x - asteroids[i].pos.x;
+				var dy = player.pos.y - asteroids[i].pos.y;
+				var invDx = ((player.size + asteroids[i].size) - Math.abs(dx)) * Math.sign(dx);
+				var invDy = ((player.size + asteroids[i].size) - Math.abs(dy)) * Math.sign(dy);
+
+				player.vel.x += invDx / 25;
+				player.vel.y += invDy / 25;
+
 				if (player.teamColor === null) {
 					return
 				}
@@ -769,7 +796,9 @@ function draw() {
 					mySword.used = true;
 					socket.emit('damageAsteroid', {
 						id: asteroids[i].id,
-						damage: mySword.attack
+						damage: mySword.attack,
+						bvelx: 0,
+						bvely: 0
 					})
 				}
 			}
@@ -814,12 +843,22 @@ function draw() {
 		}
 	}
 	player.attackSize *= (links * 1.6 + 1);
+
+	if (player.machineGunTime > 0 && Math.random() < 0.5) {
+		socket.emit('shoot', attackSize)
+	}
     
 	player.vel.x = player.vel.x * 0.99;
 	player.vel.y = player.vel.y * 0.99;
 	player.smoothMove();
+
+	textSize(35);
+	text("Players: " + players.length, windowWidth - 130, windowHeight - 100);
+
 	//render players
 	for (var i = players.length - 1; i >= 0; i--) {
+
+
 		push();
 		angleMode(DEGREES)
 		translate(players[i].x - camera.x, players[i].y - camera.y);
@@ -882,11 +921,13 @@ function draw() {
 	}
 
 	//render powerups
+	console.log(powerups)
 	for (var i = powerups.length - 1; i >= 0; i--) {
 		var p = powerups[i];
 
 		push()
 		var pImg = powerupImageFromType(p.type)
+		console.log(pImg, p.type)
 		imageMode(CENTER)
 		image(pImg, p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 		pop()
@@ -931,12 +972,15 @@ function draw() {
 		vertex(enemies[i].size, enemies[i].size * 2);
 		endShape(CLOSE);*/
 		//current fuel bar (blue)
+		push()
 		fill(40);
-		rect(enemies[i].x- camera.x -23, enemies[i].y  - camera.y + 30, enemies[i].maxHealth, 10);
+		var percentHealth = p.health / 20;
+		rect(p.pos.x - camera.x - p.size, p.pos.y  - camera.y - p.size, p.size * 2, 10);
 		
 		//current health bar (same as player color)
-		fill(enemies[i].teamColor.r,enemies[i].teamColor.g,enemies[i].teamColor.b);
-		rect(enemies[i].x - camera.x - 23, enemies[i].y - camera.y + 30, enemies[i].health, 10);
+		fill(255, 0, 0)
+		rect(p.pos.x - camera.x - p.size, p.pos.y  - camera.y - p.size, percentHealth * p.size * 2, 10);
+		pop()
 	}
 
 	//render swords
@@ -946,12 +990,19 @@ function draw() {
 		if (sword.isExpired()) {
 			sword = undefined;
 		} else {
-			push()
+			/*push()
 			rectMode(CENTER)
 			fill(sword.teamColor.r, sword.teamColor.g, sword.teamColor.b);
 			translate(sword.pos.x - camera.x, sword.pos.y - camera.y)
 			rotate(-sword.angle);
 			arc(0, 0, 280, 280, 0, PI + QUARTER_PI, PIE);
+			pop()*/
+			push()
+			translate(sword.pos.x - camera.x, sword.pos.y - camera.y)
+			tint(sword.teamColor.r, sword.teamColor.g, sword.teamColor.b);
+			rotate(-sword.angle + 90);
+			imageMode(CENTER)
+			image(swordImg, 0, 0, sword.size * 2, sword.size * 2);
 			pop()
 		}
 	}
@@ -986,7 +1037,7 @@ function meeleAttack() {
 	}
 	laserSwordSound.play();
 	lastSwordTime = millis();
-	socket.emit('meeleAttack', {})
+	socket.emit('meeleAttack', player.attack)
 }
 
 function keyReleased() {
@@ -1021,3 +1072,4 @@ function mouseClicked(){
 		blasterSound.play();
 	}
 }
+

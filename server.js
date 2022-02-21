@@ -1,6 +1,6 @@
 /*
 @file server.js
-@author Entire team
+@author Christian R, Patrick M, Craig W, David J, David K
 @date 2/18/2022
 @brief File that sets up server
 */
@@ -25,9 +25,9 @@ const enemyBulletSpeed = 2.5;
 const enemyChancePerTick = 0.01
 const enemyLimit = 5
 const enemyShootChancePerTick = 0.005
-const enemySize = 100
-const mapHeight = 2000
-const mapWidth = 3000
+const enemySize = 50;
+const mapHeight = 4000
+const mapWidth = 6000
 const playerAttack = 5
 const playerMaxHealth = 50
 const playerSize = 20
@@ -43,7 +43,8 @@ var Powerup = {
     HEAL: 0,
     SPEED: 1,
     ATTACK: 2,
-    FUEL: 3
+    FUEL: 3,
+    MACHINE_GUN: 4
 }
 
 //apply powerup effects to server-side players
@@ -148,6 +149,7 @@ function doNewAsteroids() {
 
 //parameter is asteroid object
 function spawnFuelFromAsteroidBreak(asteroid) {
+    console.log("spawning fuel...")
     var numFuel = Math.floor((asteroid.size + 12) / 25);
     for (var i = 0; i < numFuel; i++) {
         var fuel = {
@@ -255,10 +257,11 @@ function tickEnemies() {
         var angle = Math.atan2(-dy, dx);
         var degrees = angle * 180 / Math.PI;
         enemies[i].angle = degrees;
-
-        
-        enemies[i].x += Math.cos(angle) * enemyMaxSpeed;
-        enemies[i].y += -Math.sin(angle) * enemyMaxSpeed;
+        var distToNearestPlayer = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+        if (distToNearestPlayer >= 200) {
+            enemies[i].x += Math.cos(angle) * enemyMaxSpeed;
+            enemies[i].y += -Math.sin(angle) * enemyMaxSpeed;
+        }
 
         if (Math.random() < enemyShootChancePerTick) {
             var enemy = enemies[i];
@@ -514,7 +517,7 @@ function newConnection(socket) {
             x: x,
             y: y,
             angle: p.angle,
-            attack: swordAttack,
+            attack: data,
             size: p.size * swordSizeMultiplier,
             duration: swordDuration,
             teamColor: p.teamColor,
@@ -550,6 +553,7 @@ function newConnection(socket) {
         }
         console.log(d, damage)
         asteroids[d].health -= damage;
+        console.log(data, asteroids[d])
         asteroids[d].vx = asteroids[d].vx + (data.bvelx * (1 / asteroids[d].size) * 50);
         asteroids[d].vy = asteroids[d].vy + (data.bvely * (1 / asteroids[d].size) * 50);
         if (asteroids[d].health <= 0) {
@@ -634,6 +638,17 @@ function getIndex(id) {
     }
 }
 
+function resetGame() {
+    players = [];
+    asteroids = [];
+    powerups = [];
+    enemies = [];
+    teams = []
+    nextAsteroidId = 0
+    nextPowerupId = 0
+    nextEnemyId = 0
+}
+
 //true if the game is over/won
 function GameWon(players) {
     if (players.length !== 0) {
@@ -653,6 +668,7 @@ function GameWon(players) {
         } else if (samecolor === true && (players.length > 1)) {
             gameWon = true;
             io.sockets.emit('gameWon', players[0].teamColor);
+            resetGame()
         }
     } else {
         gameWon = false;

@@ -1,6 +1,6 @@
 /*
 @file sound.js
-@author entire team
+@author Patrick M.
 @date 2/19/2022
 @brief File that handles sound class
 */

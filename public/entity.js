@@ -1,6 +1,6 @@
 /*
 @file entity.js (player.js)
-@author entire team
+@author Christian R, Patrick M, Craig W, David J, David K
 @date 2/18/2022
 @brief File that controls basic player functions
 */
@@ -84,6 +84,7 @@ class HealthEntity extends Entity {
 		this.attackSize = attackSize;
 		this.teamColor = teamColor;
 		this.fuel = 3
+		this.machineGunTime = 0
 	}
 
 	isAlive() {
@@ -128,7 +129,7 @@ if the powerup has an effect that needs to expire
 }
 */
 
-const powerupSize = 20
+const powerupSize = 30
 class Powerup extends Entity {
 	//x and y are the same as parent
 	//Number type is the type of powerup
@@ -137,6 +138,7 @@ class Powerup extends Entity {
 	static SPEED = 1;
 	static ATTACK = 2;
 	static FUEL = 3
+	static MACHINE_GUN = 4;
 
 	//given powerup type, return color object
 	static colorFromType(type) {
