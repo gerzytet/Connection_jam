@@ -415,6 +415,7 @@ function newConnection(socket) {
             size: data
         };
         newProjectiles.push(projectile);
+        console.log(newProjectiles);
     }
 
     //player and enemy are player objects

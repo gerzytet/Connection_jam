@@ -294,7 +294,7 @@ function setup() {
 	
 	//TODO
 	//mapWidth/5 is just a testing artefact, so players spawn close together. replace with undivided values in final
-	player = new HealthEntity(random(mapWidth / 5), random(mapHeight / 5),50,5,5, null);
+	player = new HealthEntity(random(mapWidth), random(mapHeight),50,5,5, null);
 	var data = {
 		x: player.pos.x,
 		y: player.pos.y,
@@ -305,6 +305,7 @@ function setup() {
 		y: 0
 	}
 
+	const projectileTimeout = 10000
 	socket.emit('start', data);
 	socket.on('heartbeat', function (data) {
 		//replace player array with data from server
@@ -488,7 +489,7 @@ function gameOver() {
 	text("You are all Connected now!", windowWidth / 2, windowHeight / 5);
 
 	textSize(35);
-	text("refresh to restart", windowWidth / 2, windowHeight / 5);
+	text("refresh to restart", windowWidth / 2, windowHeight / 3);
 	setTimeout(resetGame, 5000)
 	pop()
 }
@@ -570,7 +571,7 @@ function draw() {
 
 	//background image
 	background(51);
-	image(bg,-camera.x,-camera.y,3000,2000);
+	image(bg,-camera.x,-camera.y,mapWidth,mapHeight);
 
 
 	//controls basic player movement
@@ -844,9 +845,13 @@ function draw() {
 	}
 	player.attackSize *= (links * 1.6 + 1);
 
-	if (player.machineGunTime > 0 && Math.random() < 0.5) {
-		socket.emit('shoot', attackSize)
+	player.health += links * 0.1;
+	if (player.health > player.maxHealth) {
+		player.health = player.maxHealth;
+	} else {
+		takeDamage(-links * 0.04, player.teamColor);
 	}
+
     
 	player.vel.x = player.vel.x * 0.99;
 	player.vel.y = player.vel.y * 0.99;
@@ -914,9 +919,9 @@ function draw() {
 		var p = projectiles[i];
 		push()
 		fill(p.teamColor.r, p.teamColor.g, p.teamColor.b);
+		console.log(p.teamColor.r, p.teamColor.g, p.teamColor.b);
 		ellipse(p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 		pop()
-		//image(bullet, p.pos.x - camera.x, p.pos.y - camera.y, p.size * 3, p.size * 3);
 		
 	}
 
@@ -927,7 +932,6 @@ function draw() {
 
 		push()
 		var pImg = powerupImageFromType(p.type)
-		console.log(pImg, p.type)
 		imageMode(CENTER)
 		image(pImg, p.pos.x - camera.x, p.pos.y - camera.y, p.size, p.size);
 		pop()
